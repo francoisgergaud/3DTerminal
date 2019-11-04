@@ -15,6 +15,11 @@ type MockBackgroundRendererMathHelper struct {
 	mock.Mock
 }
 
+var playerConfiguration = &environment.PlayableCharacterConfiguration{
+	Velocity:  1.0,
+	StepAngle: 0.01,
+}
+
 func (mock *MockBackgroundRendererMathHelper) calculateProjectionDistance(startPosition *common.Point2D, endPosition *common.Point2D, angle float64) float64 {
 	args := mock.Called(startPosition, endPosition, angle)
 	return args.Get(0).(float64)
@@ -53,7 +58,7 @@ func TestBackgroundRenderer(t *testing.T) {
 	bgColRenderer := new(MockBackgroundColumnRenderer)
 	bgRenderer := CreateBackgroundRenderer(screenWidth, bgColRenderer)
 	worldMap := new(testutils.MockWorldMap)
-	player := environment.NewPlayer(nil, 0.0, 0.0, worldMap)
+	player := environment.NewPlayableCharacter(nil, 0.0, playerConfiguration, worldMap)
 	screen.On("Clear")
 	for i := 0; i < screenWidth; i++ {
 		bgColRenderer.On("render", screen, player, worldMap, i)
@@ -75,7 +80,7 @@ func TestBackgroundColumnRenderer(t *testing.T) {
 	playerPosition := new(common.Point2D)
 	playerAngle := 0.5
 	worlMap := new(testutils.MockWorldMap)
-	player := environment.NewPlayer(playerPosition, playerAngle, 1.0, worlMap)
+	player := environment.NewPlayableCharacter(playerPosition, playerAngle, playerConfiguration, worlMap)
 	columnIndex := 1
 	rayTracingAngle := 0.25
 	projectedDistance := 1.5
@@ -125,7 +130,7 @@ func TestBackgroundColumnRendererWallAngle(t *testing.T) {
 	playerPosition := new(common.Point2D)
 	playerAngle := 0.5
 	worlMap := new(testutils.MockWorldMap)
-	player := environment.NewPlayer(playerPosition, playerAngle, 1.0, worlMap)
+	player := environment.NewPlayableCharacter(playerPosition, playerAngle, playerConfiguration, worlMap)
 	columnIndex := 1
 	rayTracingAngle := 0.25
 	projectedDistance := 1.5
@@ -173,7 +178,7 @@ func TestBackgroundColumnRendererNilRayTracing(t *testing.T) {
 	playerPosition := new(common.Point2D)
 	playerAngle := 0.5
 	worlMap := new(testutils.MockWorldMap)
-	player := environment.NewPlayer(playerPosition, playerAngle, 1.0, worlMap)
+	player := environment.NewPlayableCharacter(playerPosition, playerAngle, playerConfiguration, worlMap)
 	columnIndex := 1
 	rayTracingAngle := 0.25
 	backgroundStyle := tcell.StyleDefault.Background(tcell.Color102)

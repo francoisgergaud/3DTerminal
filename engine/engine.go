@@ -13,6 +13,8 @@ import (
 type Configuration struct {
 	//The frame-rate per second.
 	FrameRate int
+	//the world-update's rate.
+	WorlUpdateRate int
 	//The screen's height.
 	ScreenHeight int
 	//The screen's width.
@@ -42,8 +44,8 @@ type Engine interface {
 	StartEngine()
 }
 
-//EngineImpl implements the Engine interface.
-type EngineImpl struct {
+//Impl implements the Engine interface.
+type Impl struct {
 	screen              tcell.Screen
 	player              environment.Character
 	worldMap            environment.WorldMap
@@ -51,10 +53,11 @@ type EngineImpl struct {
 	consoleEventManager event.ConsoleEventManager
 	quit                chan struct{}
 	frameRate           int
+	updateRate          int
 }
 
 //NewEngine provides a new engine.
-func NewEngine(screen tcell.Screen, player environment.Character, worldMap environment.WorldMap, engineConfig *Configuration) *EngineImpl {
+func NewEngine(screen tcell.Screen, player environment.Character, worldMap environment.WorldMap, engineConfig *Configuration) *Impl {
 	raySampler := render.CreateRaySamplerForAnsiColorTerminal(
 		engineConfig.GradientRSFirst,
 		engineConfig.GradientRSMultiplicator,
@@ -75,7 +78,7 @@ func NewEngine(screen tcell.Screen, player environment.Character, worldMap envir
 	bgRender := render.CreateBackgroundRenderer(engineConfig.ScreenWidth, backgroundColumnRenderer)
 	quit := make(chan struct{})
 	consoleEventManager := event.NewConsoleEventManager(screen, player, quit)
-	engine := EngineImpl{
+	engine := Impl{
 		screen:              screen,
 		player:              player,
 		worldMap:            worldMap,
@@ -83,23 +86,30 @@ func NewEngine(screen tcell.Screen, player environment.Character, worldMap envir
 		consoleEventManager: consoleEventManager,
 		quit:                quit,
 		frameRate:           engineConfig.FrameRate,
+		updateRate:          engineConfig.WorlUpdateRate,
 	}
 	return &engine
 }
 
 //StartEngine initializes the required element and start the engine to render world's elements in pseudo-3D
-func (engine *EngineImpl) StartEngine() {
+func (engine *Impl) StartEngine() {
 	engine.screen.Clear()
+	engine.player.Start()
 	go engine.consoleEventManager.Listen()
-	ticker := time.NewTicker(time.Duration(1000/engine.frameRate) * time.Millisecond)
+	frameUpdateTicker := time.NewTicker(time.Duration(1000/engine.frameRate) * time.Millisecond)
+	worldUpdateTicker := time.NewTicker(time.Duration(1000/engine.updateRate) * time.Millisecond)
 	for {
 		select {
 		case <-engine.quit:
-			ticker.Stop()
+			frameUpdateTicker.Stop()
+			worldUpdateTicker.Stop()
 			engine.screen.Fini()
+			close(engine.player.GetQuitChannel())
 			return
-		case <-ticker.C:
+		case <-frameUpdateTicker.C:
 			engine.bgRender.Render(engine.worldMap, engine.player, engine.screen)
+		case updateWorldTickerTime := <-worldUpdateTicker.C:
+			engine.player.GetUpdateChannel() <- updateWorldTickerTime
 		}
 	}
 

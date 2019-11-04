@@ -21,16 +21,25 @@ func (mock *MockBackgroundRenderer) Render(worldMap environment.WorldMap, player
 func TestStartEngine(t *testing.T) {
 	screen := new(testutils.MockScreen)
 	worldMap := new(testutils.MockWorldMap)
-	player := environment.NewPlayer(nil, 0.0, 0.0, worldMap)
+	updateChannel := make(chan time.Time)
+	quitChannel := make(chan struct{})
+	player := &testutils.MockCharacter{
+		QuitChannel:   quitChannel,
+		UpdateChannel: updateChannel,
+	}
 	bgRender := new(MockBackgroundRenderer)
 	consoleEventListener := new(testutils.MockConsoleEventManager)
 	//to shorten the test of the timer. A ticker is generated every 1000/250 ms
 	frameRate := 250
+	updateRate := 500
 	screen.On("Clear")
 	consoleEventListener.On("Listen")
 	bgRender.On("Render", worldMap, player, screen)
+	player.On("Start")
+	player.On("GetUpdateChannel")
+	player.On("GetQuitChannel")
 	quit := make(chan struct{})
-	engine := EngineImpl{
+	engine := Impl{
 		screen:              screen,
 		player:              player,
 		worldMap:            worldMap,
@@ -38,6 +47,7 @@ func TestStartEngine(t *testing.T) {
 		consoleEventManager: consoleEventListener,
 		quit:                quit,
 		frameRate:           frameRate,
+		updateRate:          updateRate,
 	}
 	go func() {
 		<-time.After(time.Millisecond * time.Duration((2*1000)/frameRate))

@@ -60,8 +60,14 @@ func NewWorldMap() environment.WorldMap {
 
 //NewPlayer provides a new player.
 func NewPlayer(worldMap environment.WorldMap) environment.Character {
-	player := environment.NewPlayer(
-		&common.Point2D{X: 5, Y: 5}, 0, 0.1, worldMap)
+	player := environment.NewPlayableCharacter(
+		&common.Point2D{X: 5, Y: 5},
+		0,
+		&environment.PlayableCharacterConfiguration{
+			Velocity:  0.1,
+			StepAngle: 0.01,
+		},
+		worldMap)
 	return player
 }
 
@@ -72,6 +78,7 @@ func InitGame() *Game {
 	player := NewPlayer(worldMap)
 	engineConfiguration := &engine.Configuration{
 		FrameRate:                  20,
+		WorlUpdateRate:             40,
 		ScreenHeight:               40,
 		ScreenWidth:                120,
 		PlayerFieldOfViewAngle:     0.4,
