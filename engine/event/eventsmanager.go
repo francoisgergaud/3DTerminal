@@ -1,7 +1,7 @@
 package event
 
 import (
-	"francoisgergaud/3dGame/environment"
+	"francoisgergaud/3dGame/environment/character"
 
 	"github.com/gdamore/tcell"
 )
@@ -12,7 +12,7 @@ type ConsoleEventManager interface {
 }
 
 //NewConsoleEventManager builds a new ConsoleEventManagerImpl.
-func NewConsoleEventManager(screen tcell.Screen, player environment.Character, quit chan struct{}) ConsoleEventManager {
+func NewConsoleEventManager(screen tcell.Screen, player character.Character, quit chan struct{}) ConsoleEventManager {
 	return &ConsoleEventManagerImpl{
 		screen: screen,
 		player: player,
@@ -23,7 +23,7 @@ func NewConsoleEventManager(screen tcell.Screen, player environment.Character, q
 //ConsoleEventManagerImpl is the implementation of the ConsoleEventManager interface.
 type ConsoleEventManagerImpl struct {
 	screen tcell.Screen
-	player environment.Character
+	player character.Character
 	quit   chan struct{}
 }
 

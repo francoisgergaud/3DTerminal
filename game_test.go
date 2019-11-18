@@ -1,8 +1,10 @@
 package main
 
 import (
+	"francoisgergaud/3dGame/internal/testutils"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -21,4 +23,11 @@ func TestStart(t *testing.T) {
 		engine: engine,
 	}
 	game.Start()
+}
+
+func TestInitGame(t *testing.T) {
+	screen := new(testutils.MockScreen)
+	game, err := InitGame(screen)
+	assert.Nil(t, err)
+	assert.NotNil(t, game)
 }

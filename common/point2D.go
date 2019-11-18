@@ -12,7 +12,15 @@ type Point2D struct {
 
 //Distance to another point
 func (point *Point2D) Distance(otherPoint *Point2D) float64 {
-	return math.Hypot(otherPoint.X-point.X, otherPoint.Y-point.Y)
+	if point.AlmostEquals(*otherPoint) {
+		return 0
+	} else if math.Abs(otherPoint.X-point.X) <= float64EqualityThreshold {
+		return math.Abs(otherPoint.Y - point.Y)
+	} else if math.Abs(otherPoint.Y-point.Y) <= float64EqualityThreshold {
+		return math.Abs(otherPoint.X - point.X)
+	} else {
+		return math.Hypot(otherPoint.X-point.X, otherPoint.Y-point.Y)
+	}
 }
 
 func (point Point2D) String() string {

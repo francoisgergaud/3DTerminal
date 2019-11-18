@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"francoisgergaud/3dGame/common"
 	"francoisgergaud/3dGame/engine"
-	"francoisgergaud/3dGame/environment"
-	"os"
 
 	"github.com/gdamore/tcell"
 )
@@ -20,23 +18,9 @@ func (game *Game) Start() {
 	game.engine.StartEngine()
 }
 
-// NewScreen provides a new screen.
-func NewScreen() *tcell.Screen {
-	screen, e := tcell.NewScreen()
-	if e != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", e)
-		os.Exit(1)
-	}
-	if e = screen.Init(); e != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", e)
-		os.Exit(1)
-	}
-	return &screen
-}
-
 //NewWorldMap provides a new world-map.
-func NewWorldMap() environment.WorldMap {
-	grid := [][]int{
+func NewWorldMap() [][]int {
+	return [][]int{
 		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -55,27 +39,25 @@ func NewWorldMap() environment.WorldMap {
 		{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
 		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
 	}
-	return environment.NewWorldMap(grid)
-}
-
-//NewPlayer provides a new player.
-func NewPlayer(worldMap environment.WorldMap) environment.Character {
-	player := environment.NewPlayableCharacter(
-		&common.Point2D{X: 5, Y: 5},
-		0,
-		&environment.PlayableCharacterConfiguration{
-			Velocity:  0.1,
-			StepAngle: 0.01,
-		},
-		worldMap)
-	return player
 }
 
 //InitGame initializes a game.
-func InitGame() *Game {
-	screen := NewScreen()
+func InitGame(screen tcell.Screen) (*Game, error) {
 	worldMap := NewWorldMap()
-	player := NewPlayer(worldMap)
+	playerConfiguration := engine.PlayerConfiguration{
+		InitialPosition: &common.Point2D{X: 5, Y: 5},
+		InitialAngle:    0.0,
+		Velocity:        0.1,
+		StepAngle:       0.01,
+	}
+	worlElementConfigurations := make([]engine.WorldElementConfiguration, 1)
+	worlElementConfigurations[0] = engine.WorldElementConfiguration{
+		InitialPosition: &common.Point2D{X: 9, Y: 12},
+		InitialAngle:    0.3,
+		Velocity:        0.02,
+		Size:            0.3,
+		Style:           tcell.StyleDefault.Background(tcell.ColorDarkBlue),
+	}
 	engineConfiguration := &engine.Configuration{
 		FrameRate:                  20,
 		WorlUpdateRate:             40,
@@ -88,11 +70,18 @@ func InitGame() *Game {
 		GradientRSLimit:            10.0,
 		GradientRSWallStartColor:   255,
 		GradientRSWallEndColor:     240,
-		GradientRSBackgroundRange:  []float32{0.5, 0.55, 0.65, 1.0},
+		GradientRSBackgroundRange:  []float32{0.5, 0.55, 0.65},
 		GradientRSBackgroundColors: []int{63, 58, 64, 70},
+		WorldMap:                   worldMap,
+		PlayerConfiguration:        &playerConfiguration,
+		WorldElementConfigurations: worlElementConfigurations,
+	}
+	engine, err := engine.NewEngine(screen, engineConfiguration)
+	if err != nil {
+		return nil, fmt.Errorf("Error while initializing engine: %w", err)
 	}
 	return &Game{
-		engine: engine.NewEngine(*screen, player, worldMap, engineConfiguration),
-	}
+		engine: engine,
+	}, nil
 
 }

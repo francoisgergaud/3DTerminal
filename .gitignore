@@ -5,6 +5,7 @@
 *.dll
 *.so
 *.dylib
+3dGame
 
 # Test binary, built with `go test -c`
 *.test

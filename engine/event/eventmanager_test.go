@@ -2,6 +2,7 @@ package event
 
 import (
 	"francoisgergaud/3dGame/internal/testutils"
+	"francoisgergaud/3dGame/internal/testutils/environment/character"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestListenExitEvent(t *testing.T) {
-	mockCharacter := new(testutils.MockCharacter)
+	mockCharacter := new(character.MockCharacter)
 	mockScreen := new(testutils.MockScreen)
 	quit := make(chan struct{})
 	keyboardEvent := tcell.NewEventKey(tcell.KeyEscape, ' ', 0)
@@ -20,7 +21,7 @@ func TestListenExitEvent(t *testing.T) {
 }
 
 func TestListenPlayerMoveEvent(t *testing.T) {
-	mockCharacter := new(testutils.MockCharacter)
+	mockCharacter := new(character.MockCharacter)
 	mockScreen := new(testutils.MockScreen)
 	quit := make(chan struct{})
 	upArrowEvent := tcell.NewEventKey(tcell.KeyUp, ' ', 0)

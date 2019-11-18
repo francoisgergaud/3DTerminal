@@ -16,3 +16,26 @@ Then the following remote-launch configuration is used:
     "host": "127.0.0.1",
 }
 ``` 
+
+To debug Using VSCode, as Delve cannot be used in interqctive mode, the headless mode is used:
+```dlv debug --headless --listen=:2345 --log --api-version=2```
+Then the following remote-launch configuration is used:
+```
+{
+    "name": "3dEngine Remote debug",
+    "type": "go",
+    "request": "attach",
+    "mode": "remote",
+    "remotePath": "${workspaceFolder}",
+    "port": 2345,
+    "host": "127.0.0.1",
+}
+``` 
+
+#Build/Execution
+Inside the source folder:
+```go build && go install```
+and then
+```$GOPATH/bin/3dGame````
+
+
