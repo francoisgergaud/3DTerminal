@@ -1,32 +1,29 @@
 package main
 
 import (
-	"francoisgergaud/3dGame/internal/testutils"
 	"testing"
 
+	testClient "francoisgergaud/3dGame/internal/testutils/client"
+	testConsoleManager "francoisgergaud/3dGame/internal/testutils/client/consolemanager"
+	testtcell "francoisgergaud/3dGame/internal/testutils/tcell"
+
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
-type MockEngine struct {
-	mock.Mock
-}
-
-func (mock *MockEngine) StartEngine() {
-	mock.Called()
-}
-
 func TestStart(t *testing.T) {
-	engine := new(MockEngine)
+	engine := new(testClient.MockEngine)
+	consoleEventManager := new(testConsoleManager.MockConsoleEventManager)
 	engine.On("StartEngine")
+	consoleEventManager.On("Listen")
 	game := Game{
-		engine: engine,
+		engine:              engine,
+		consoleEventManager: consoleEventManager,
 	}
 	game.Start()
 }
 
 func TestInitGame(t *testing.T) {
-	screen := new(testutils.MockScreen)
+	screen := new(testtcell.MockScreen)
 	game, err := InitGame(screen)
 	assert.Nil(t, err)
 	assert.NotNil(t, game)

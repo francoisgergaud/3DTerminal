@@ -2,63 +2,40 @@ package main
 
 import (
 	"fmt"
-	"francoisgergaud/3dGame/common"
-	"francoisgergaud/3dGame/engine"
+	"francoisgergaud/3dGame/client"
+	serverConnectorImpl "francoisgergaud/3dGame/client/connector/impl"
+	"francoisgergaud/3dGame/client/consolemanager"
+	consoleManagerImpl "francoisgergaud/3dGame/client/consolemanager/impl"
+	clientImpl "francoisgergaud/3dGame/client/impl"
+	clientconnectorImpl "francoisgergaud/3dGame/server/connector/impl"
+	serverImpl "francoisgergaud/3dGame/server/impl"
 
 	"github.com/gdamore/tcell"
 )
 
 //Game defines the game entity.
 type Game struct {
-	engine engine.Engine
+	engine              client.Engine
+	consoleEventManager consolemanager.ConsoleEventManager
 }
 
 //Start the game.
 func (game *Game) Start() {
+	go game.consoleEventManager.Listen()
 	game.engine.StartEngine()
-}
-
-//NewWorldMap provides a new world-map.
-func NewWorldMap() [][]int {
-	return [][]int{
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1},
-		{1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1},
-		{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-		{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-	}
 }
 
 //InitGame initializes a game.
 func InitGame(screen tcell.Screen) (*Game, error) {
-	worldMap := NewWorldMap()
-	playerConfiguration := engine.PlayerConfiguration{
-		InitialPosition: &common.Point2D{X: 5, Y: 5},
-		InitialAngle:    0.0,
-		Velocity:        0.1,
-		StepAngle:       0.01,
+	clientConnection := &clientconnectorImpl.LocalClientConnection{}
+	serverConnection := &serverConnectorImpl.LocalServerConnection{}
+	quit := make(chan struct{})
+	server, err := serverImpl.NewServer(quit)
+	if err != nil {
+		return nil, fmt.Errorf("error while instantiating the server: %w", err)
 	}
-	worlElementConfigurations := make([]engine.WorldElementConfiguration, 1)
-	worlElementConfigurations[0] = engine.WorldElementConfiguration{
-		InitialPosition: &common.Point2D{X: 9, Y: 12},
-		InitialAngle:    0.3,
-		Velocity:        0.02,
-		Size:            0.3,
-		Style:           tcell.StyleDefault.Background(tcell.ColorDarkBlue),
-	}
-	engineConfiguration := &engine.Configuration{
+	playerID, worldMap, playerState, otherPlayerConfigurations := server.RegisterPlayer(clientConnection)
+	engineConfiguration := &client.Configuration{
 		FrameRate:                  20,
 		WorlUpdateRate:             40,
 		ScreenHeight:               40,
@@ -73,15 +50,24 @@ func InitGame(screen tcell.Screen) (*Game, error) {
 		GradientRSBackgroundRange:  []float32{0.5, 0.55, 0.65},
 		GradientRSBackgroundColors: []int{63, 58, 64, 70},
 		WorldMap:                   worldMap,
-		PlayerConfiguration:        &playerConfiguration,
-		WorldElementConfigurations: worlElementConfigurations,
+		PlayerID:                   playerID,
+		PlayerConfiguration:        playerState,
+		OtherPlayerConfigurations:  otherPlayerConfigurations,
+		QuitChannel:                quit,
 	}
-	engine, err := engine.NewEngine(screen, engineConfiguration)
+	engine, err := clientImpl.NewEngine(screen, engineConfiguration, serverConnection)
 	if err != nil {
 		return nil, fmt.Errorf("Error while initializing engine: %w", err)
 	}
+	consoleEventManager := consoleManagerImpl.NewConsoleEventManager(screen, quit)
+	consoleEventManager.SetPlayer(engine.GetPlayer())
+	clientConnection.Server = server
+	clientConnection.ServerConnection = serverConnection
+	serverConnection.Engine = engine
+	serverConnection.ClientConnection = clientConnection
 	return &Game{
-		engine: engine,
+		engine:              engine,
+		consoleEventManager: consoleEventManager,
 	}, nil
 
 }

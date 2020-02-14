@@ -34,4 +34,6 @@ func main() {
 		panic(err)
 	}
 	game.Start()
+	// fmt.Println("starting web-server.")
+	// log.Fatal(http.ListenAndServe("localhost:8081", http.FileServer(http.Dir("resources/web"))))
 }
