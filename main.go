@@ -1,39 +1,38 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"log"
-	"net/http"
 	_ "net/http/pprof"
 	"os"
-
-	"github.com/gdamore/tcell"
 )
 
 func main() {
 	// CPU profiling by default
-	go func() {
-		log.Printf("Starting Server! \t Go to http://localhost:6060/debug/pprof/\n")
-		err := http.ListenAndServe("localhost:6060", nil)
-		if err != nil {
-			log.Printf("Failed to start the server! Error: %v", err)
-		}
-	}()
+	// go func() {
+	// 	log.Printf("Starting Server! \t Go to http://localhost:6060/debug/pprof/\n")
+	// 	err := http.ListenAndServe("localhost:6060", nil)
+	// 	if err != nil {
+	// 		log.Printf("Failed to start the server! Error: %v", err)
+	// 	}
+	// }()
 	fmt.Println("terminal: " + os.Getenv("TERM"))
-	tcell.SetEncodingFallback(tcell.EncodingFallbackUTF8)
-	screen, e := tcell.NewScreen()
-	if e != nil {
-		panic(e)
+	var mode = flag.String("mode", "local", "possible mode: 'local', 'remote', 'remoteClient', 'remoteServer'")
+	var remoteAddress = flag.String("address", "127.0.0.1:9836", "remote-server host-port")
+	var serverPort = flag.String("port", "9836", "remote-server host-port")
+	flag.Parse()
+	game := NewGame()
+	var err error
+	if *mode == "local" {
+		err = game.InitLocalGame()
+	} else if *mode == "remote" {
+		err = game.InitRemoteGame(*serverPort)
+	} else if *mode == "remoteClient" {
+		err = game.InitRemoteClient(*remoteAddress)
+	} else if *mode == "remoteServer" {
+		err = game.InitRemoteServer(*serverPort)
 	}
-	if e = screen.Init(); e != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", e)
-		panic(e)
-	}
-	game, err := InitGame(screen)
 	if err != nil {
 		panic(err)
 	}
-	game.Start()
-	// fmt.Println("starting web-server.")
-	// log.Fatal(http.ListenAndServe("localhost:8081", http.FileServer(http.Dir("resources/web"))))
 }

@@ -12,9 +12,10 @@ type MockConsoleEventManager struct {
 	mock.Mock
 }
 
-//Listen mocks the call to the the method of the same name.
-func (mock *MockConsoleEventManager) Listen() {
-	mock.Called()
+//Run mocks the call to the the method of the same name.
+func (mock *MockConsoleEventManager) Run() error {
+	args := mock.Called()
+	return args.Error(0)
 }
 
 //SetPlayer mocks the call to the the method of the same name.

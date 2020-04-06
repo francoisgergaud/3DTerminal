@@ -8,7 +8,7 @@ import (
 )
 
 //NewConsoleEventManager builds a new ConsoleEventManagerImpl.
-func NewConsoleEventManager(screen tcell.Screen, quit chan struct{}) consolemanager.ConsoleEventManager {
+func NewConsoleEventManager(screen tcell.Screen, quit chan<- interface{}) consolemanager.ConsoleEventManager {
 	return &ConsoleEventManagerImpl{
 		screen:      screen,
 		quitChannel: quit,
@@ -19,7 +19,7 @@ func NewConsoleEventManager(screen tcell.Screen, quit chan struct{}) consolemana
 type ConsoleEventManagerImpl struct {
 	screen      tcell.Screen
 	player      player.Player
-	quitChannel chan struct{}
+	quitChannel chan<- interface{}
 }
 
 //SetPlayer set the player the console-event will be sent to
@@ -27,8 +27,8 @@ func (consoleEventManager *ConsoleEventManagerImpl) SetPlayer(player player.Play
 	consoleEventManager.player = player
 }
 
-//Listen listens to the events emit by the terminal.
-func (consoleEventManager *ConsoleEventManagerImpl) Listen() {
+//Run is a blocking loop listening to the events emited by the terminal.
+func (consoleEventManager *ConsoleEventManagerImpl) Run() error {
 	for {
 		ev := consoleEventManager.screen.PollEvent()
 		switch ev := ev.(type) {
@@ -36,7 +36,7 @@ func (consoleEventManager *ConsoleEventManagerImpl) Listen() {
 			switch ev.Key() {
 			case tcell.KeyEscape, tcell.KeyEnter:
 				close(consoleEventManager.quitChannel)
-				return
+				return nil
 			default:
 				if consoleEventManager.player != nil {
 					consoleEventManager.player.Action(ev)

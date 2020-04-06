@@ -1,7 +1,9 @@
 package testclient
 
 import (
+	"francoisgergaud/3dGame/client/connector"
 	"francoisgergaud/3dGame/client/player"
+	"francoisgergaud/3dGame/common/environment/animatedelement"
 	"francoisgergaud/3dGame/common/event"
 
 	"github.com/stretchr/testify/mock"
@@ -12,18 +14,29 @@ type MockEngine struct {
 	mock.Mock
 }
 
-//StartEngine mocks the method of the same name
-func (mock *MockEngine) StartEngine() {
-	mock.Called()
-}
-
 //ReceiveEventsFromServer mocks the method of the same name
 func (mock *MockEngine) ReceiveEventsFromServer(events []event.Event) {
 	mock.Called(events)
 }
 
-//GetPlayer mocks the method of the same name
-func (mock *MockEngine) GetPlayer() player.Player {
+//Player mocks the method of the same name
+func (mock *MockEngine) Player() player.Player {
 	args := mock.Called()
 	return args.Get(0).(player.Player)
+}
+
+//Shutdown mocks the method of the same name
+func (mock *MockEngine) Shutdown() {
+	mock.Called()
+}
+
+//ConnectToServer mocks the method of the same name
+func (mock *MockEngine) ConnectToServer(connectionToServer connector.ServerConnector) {
+	mock.Called(connectionToServer)
+}
+
+//OtherPlayers mocks the method of the name
+func (mock *MockEngine) OtherPlayers() map[string]animatedelement.AnimatedElement {
+	args := mock.Called()
+	return args.Get(0).(map[string]animatedelement.AnimatedElement)
 }

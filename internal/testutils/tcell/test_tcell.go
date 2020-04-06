@@ -11,10 +11,10 @@ type MockScreen struct {
 }
 
 //Init mocks the operation of the same name from the Screen interface.
-func (mock *MockScreen) Init() error { return nil }
+func (mock *MockScreen) Init() error { mock.Called(); return nil }
 
 //Fini mocks the operation of the same name from the Screen interface.
-func (mock *MockScreen) Fini() {}
+func (mock *MockScreen) Fini() { mock.Called() }
 
 //Clear mocks the operation of the same name from the Screen interface.
 func (mock *MockScreen) Clear() { mock.Called() }
@@ -23,7 +23,9 @@ func (mock *MockScreen) Clear() { mock.Called() }
 func (mock *MockScreen) Fill(r rune, s tcell.Style) { mock.Called(r, s) }
 
 //SetCell mocks the operation of the same name from the Screen interface.
-func (mock *MockScreen) SetCell(x int, y int, style tcell.Style, ch ...rune) {}
+func (mock *MockScreen) SetCell(x int, y int, style tcell.Style, ch ...rune) {
+	mock.Called(x, y, style, ch)
+}
 
 //GetContent mocks the operation of the same name from the Screen interface.
 func (mock *MockScreen) GetContent(x, y int) (mainc rune, combc []rune, style tcell.Style, width int) {

@@ -6,6 +6,7 @@ import (
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
+	publisher "francoisgergaud/3dGame/common/event/publisher"
 	publisherImpl "francoisgergaud/3dGame/common/event/publisher/impl"
 	internalMath "francoisgergaud/3dGame/common/math"
 	mathHelper "francoisgergaud/3dGame/common/math/helper"
@@ -15,10 +16,17 @@ import (
 	"github.com/gdamore/tcell"
 )
 
+type Bot interface {
+	publisher.EventPublisher
+	animatedelement.AnimatedElement
+}
+
 //NewBotImpl build a new bot implementation.
-func NewBotImpl(id string, initialPosition *internalMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper mathHelper.MathHelper, quit chan struct{}) bot.Bot {
+func NewBotImpl(id string, initialPosition *internalMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper mathHelper.MathHelper, quit <-chan interface{}) bot.Bot {
 	result := BotImpl{
-		AnimatedElement: animatedelementImpl.NewAnimatedElement(id, initialPosition, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, world, mathHelper, quit),
+		id:              id,
+		AnimatedElement: animatedelementImpl.NewAnimatedElement(initialPosition, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, world, mathHelper),
+		EventPublisher:  publisherImpl.NewEventPublisherImpl(),
 		mathHelper:      mathHelper,
 		world:           world,
 	}
@@ -27,15 +35,16 @@ func NewBotImpl(id string, initialPosition *internalMath.Point2D, initialAngle, 
 
 //BotImpl is a bot implementation.
 type BotImpl struct {
+	id string
 	animatedelement.AnimatedElement
-	publisherImpl.EventPublisherImpl
+	publisher.EventPublisher
 	world      world.WorldMap
 	mathHelper mathHelper.MathHelper
 }
 
 //Move the bot's position depending on the colision of walls
 func (bot *BotImpl) Move() {
-	state := bot.GetState()
+	state := bot.State()
 	rayDestination := bot.mathHelper.CastRay(state.Position, bot.world, state.Angle, state.Velocity)
 	if rayDestination != nil {
 		//horizontal rebound
@@ -60,7 +69,7 @@ func (bot *BotImpl) Move() {
 		//state.Position.X = rayDestination.X + math.Cos(state.Angle*math.Pi)*(state.Velocity-distanceToWall)
 		//state.Position.Y = rayDestination.Y + math.Sin(state.Angle*math.Pi)*(state.Velocity-distanceToWall)
 		event := event.Event{
-			PlayerID: bot.AnimatedElement.GetID(),
+			PlayerID: bot.id,
 			Action:   "move",
 			State:    state,
 		}

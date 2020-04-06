@@ -23,7 +23,7 @@ type MathHelper interface {
 }
 
 //NewMathHelper builds a new MathHelper.
-func NewMathHelper(rayCaster raycaster.RayCaster) (MathHelper, error) {
+func NewMathHelper(rayCaster raycaster.RayCaster) (*MathHelperImpl, error) {
 	if rayCaster == nil {
 		return nil, fmt.Errorf("Math-helper 'raycaster' cannot be nil")
 	}
