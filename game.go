@@ -3,11 +3,10 @@ package main
 import (
 	"fmt"
 	"francoisgergaud/3dGame/client"
-	serverConnectorImpl "francoisgergaud/3dGame/client/connector/impl"
+	localServerConnector "francoisgergaud/3dGame/client/connector/local/impl"
 	"francoisgergaud/3dGame/client/consolemanager"
 	consoleManagerImpl "francoisgergaud/3dGame/client/consolemanager/impl"
 	clientImpl "francoisgergaud/3dGame/client/impl"
-	clientconnectorImpl "francoisgergaud/3dGame/server/connector/impl"
 	serverImpl "francoisgergaud/3dGame/server/impl"
 
 	"github.com/gdamore/tcell"
@@ -17,27 +16,28 @@ import (
 type Game struct {
 	engine              client.Engine
 	consoleEventManager consolemanager.ConsoleEventManager
+	quit                chan struct{}
 }
 
 //Start the game.
 func (game *Game) Start() {
 	go game.consoleEventManager.Listen()
-	game.engine.StartEngine()
+	//wait until quit
+	<-game.quit
+	<-game.engine.GetShutdown()
 }
 
 //InitGame initializes a game.
 func InitGame(screen tcell.Screen) (*Game, error) {
-	clientConnection := &clientconnectorImpl.LocalClientConnection{}
-	serverConnection := &serverConnectorImpl.LocalServerConnection{}
 	quit := make(chan struct{})
-	server, err := serverImpl.NewServer(quit)
+	worldUpdateRate := 20 //world-update frequency, for both client and server
+	server, err := serverImpl.NewServer(worldUpdateRate, quit)
 	if err != nil {
 		return nil, fmt.Errorf("error while instantiating the server: %w", err)
 	}
-	playerID, worldMap, playerState, otherPlayerConfigurations := server.RegisterPlayer(clientConnection)
 	engineConfiguration := &client.Configuration{
 		FrameRate:                  20,
-		WorlUpdateRate:             40,
+		WorlUpdateRate:             worldUpdateRate,
 		ScreenHeight:               40,
 		ScreenWidth:                120,
 		PlayerFieldOfViewAngle:     0.4,
@@ -49,25 +49,22 @@ func InitGame(screen tcell.Screen) (*Game, error) {
 		GradientRSWallEndColor:     240,
 		GradientRSBackgroundRange:  []float32{0.5, 0.55, 0.65},
 		GradientRSBackgroundColors: []int{63, 58, 64, 70},
-		WorldMap:                   worldMap,
-		PlayerID:                   playerID,
-		PlayerConfiguration:        playerState,
-		OtherPlayerConfigurations:  otherPlayerConfigurations,
 		QuitChannel:                quit,
 	}
-	engine, err := clientImpl.NewEngine(screen, engineConfiguration, serverConnection)
+	consoleEventManager := consoleManagerImpl.NewConsoleEventManager(screen, quit)
+	engine, err := clientImpl.NewEngine(screen, consoleEventManager, engineConfiguration)
 	if err != nil {
 		return nil, fmt.Errorf("Error while initializing engine: %w", err)
 	}
-	consoleEventManager := consoleManagerImpl.NewConsoleEventManager(screen, quit)
-	consoleEventManager.SetPlayer(engine.GetPlayer())
-	clientConnection.Server = server
-	clientConnection.ServerConnection = serverConnection
-	serverConnection.Engine = engine
-	serverConnection.ClientConnection = clientConnection
+	//client-server initialization
+	serverConnection := localServerConnector.NewLocalServerConnection(engine, server, quit)
+	serverConnection.ConnectToServer()
+
+	//starts the game
 	return &Game{
 		engine:              engine,
 		consoleEventManager: consoleEventManager,
+		quit:                quit,
 	}, nil
 
 }

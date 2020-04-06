@@ -12,5 +12,4 @@ type AnimatedElement interface {
 	Move()
 	GetState() *state.AnimatedElementState
 	SetState(state *state.AnimatedElementState)
-	GetID() string
 }

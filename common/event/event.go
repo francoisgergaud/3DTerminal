@@ -8,4 +8,5 @@ type Event struct {
 	Action    string
 	State     *state.AnimatedElementState
 	TimeFrame uint32
+	ExtraData map[string]interface{}
 }

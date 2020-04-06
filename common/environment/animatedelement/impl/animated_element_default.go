@@ -13,7 +13,7 @@ import (
 )
 
 //NewAnimatedElement builds a new pointer to AnimatedElementImpl.
-func NewAnimatedElement(id string, initialPosition *innerMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement {
+func NewAnimatedElement(initialPosition *innerMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement {
 	state := state.AnimatedElementState{
 		Position:        initialPosition,
 		Angle:           initialAngle,
@@ -24,14 +24,13 @@ func NewAnimatedElement(id string, initialPosition *innerMath.Point2D, initialAn
 		MoveDirection:   moveDirection,
 		RotateDirection: rotateDirection,
 	}
-	return NewAnimatedElementWithState(id, state, world, mathHelper, quit)
+	return NewAnimatedElementWithState(state, world, mathHelper, quit)
 }
 
 //NewAnimatedElementWithState builds a new pointer to AnimatedElementImpl.
-func NewAnimatedElementWithState(id string, animatedElementState state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement {
+func NewAnimatedElementWithState(animatedElementState state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement {
 	return &AnimatedElementImpl{
 		state:         &animatedElementState,
-		id:            id,
 		world:         world,
 		updateChannel: make(chan time.Time),
 		quitChannel:   quit,
@@ -62,11 +61,6 @@ func (animatedElement *AnimatedElementImpl) GetState() *state.AnimatedElementSta
 //SetState update the animated-element's state.
 func (animatedElement *AnimatedElementImpl) SetState(state *state.AnimatedElementState) {
 	animatedElement.state = state
-}
-
-//GetID returns the identifier
-func (animatedElement *AnimatedElementImpl) GetID() string {
-	return animatedElement.id
 }
 
 //Start triggers the animation of the animated-element.

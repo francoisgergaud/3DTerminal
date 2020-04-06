@@ -11,23 +11,26 @@ import (
 	testconnector "francoisgergaud/3dGame/internal/testutils/server/connector"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestNewServer(t *testing.T) {
 	quit := make(chan struct{})
-	server, error := NewServer(quit)
+	worldUpdateRate := 3
+	server, error := NewServer(worldUpdateRate, quit)
 	assert.Nil(t, error)
 	serverImpl, ok := server.(*Impl)
 	assert.True(t, ok)
 	assert.Len(t, serverImpl.bots, 1)
 	assert.Len(t, serverImpl.players, 0)
+	assert.Equal(t, worldUpdateRate, serverImpl.botsUpdateRate)
 }
 
 func TestRegisterPlayer(t *testing.T) {
 	quit := make(chan struct{})
 	clientConnections := make(map[string]connector.ClientConnection)
 	worldMap := new(testworld.MockWorldMap)
-	palyers := make(map[string]*state.AnimatedElementState)
+	serverPlayers := make(map[string]*state.AnimatedElementState)
 	bots := make(map[string]bot.Bot)
 	timeFrame := uint32(0)
 	eventQueue := make(chan event.Event, 100)
@@ -36,7 +39,7 @@ func TestRegisterPlayer(t *testing.T) {
 	server := Impl{
 		clientConnections: clientConnections,
 		worldMap:          worldMap,
-		players:           palyers,
+		players:           serverPlayers,
 		bots:              bots,
 		timeFrame:         timeFrame,
 		eventQueue:        eventQueue,
@@ -46,15 +49,29 @@ func TestRegisterPlayer(t *testing.T) {
 	}
 	clientConnection := new(testconnector.MockClientConnection)
 	worldMap.On("Clone").Return(worldMap)
-	playerID, worldMapForPlayer, state, otherPlayers := server.RegisterPlayer(clientConnection)
-	assert.NotEmpty(t, playerID)
-	assert.Equal(t, worldMapForPlayer, worldMap)
-	assert.NotNil(t, state)
-	assert.NotEmpty(t, otherPlayers)
+	var eventCapture []event.Event
+	clientConnection.On(
+		"SendEventsToClient",
+		server.timeFrame,
+		mock.MatchedBy(
+			func(events []event.Event) bool {
+				eventCapture = events
+				return true
+			},
+		),
+	)
+	server.RegisterPlayer(clientConnection)
+	assert.NotEmpty(t, eventCapture[0].PlayerID)
+	assert.Equal(t, worldMap, eventCapture[0].ExtraData["worldMap"])
+	assert.NotNil(t, eventCapture[0].State)
+	assert.Empty(t, eventCapture[0].ExtraData["otherPlayers"])
+	assert.NotNil(t, serverPlayers[eventCapture[0].PlayerID])
 	assert.Equal(t, 1, len(server.eventQueue))
-	assert.Equal(t, clientConnection, server.clientConnections[playerID])
-	assert.Equal(t, state, *server.players[playerID])
-	assert.Equal(t, worldMap, server.worldMap)
+	assert.Equal(t, timeFrame, server.timeFrame)
+	newPlayerEvent := <-server.eventQueue
+	assert.Equal(t, newPlayerEvent.Action, "join")
+	assert.NotEmpty(t, newPlayerEvent.State)
+
 }
 
 func TestUnregisterClient(t *testing.T) {
@@ -88,7 +105,7 @@ func TestUnregisterClient(t *testing.T) {
 	assert.NotContains(t, playerID, server.players)
 }
 
-func TestReceiveEventsFromClient(t *testing.T) {
+func TestReceiveEventFromClient(t *testing.T) {
 	quit := make(chan struct{})
 	clientConnections := make(map[string]connector.ClientConnection)
 	worldMap := new(testworld.MockWorldMap)
@@ -119,9 +136,7 @@ func TestReceiveEventsFromClient(t *testing.T) {
 		PlayerID: playerID,
 		State:    &newPlayerState,
 	}
-	eventsFromPlayer := make([]event.Event, 0)
-	eventsFromPlayer = append(eventsFromPlayer, eventFromPlayer)
-	server.ReceiveEventsFromClient(eventsFromPlayer)
+	server.ReceiveEventFromClient(eventFromPlayer)
 	assert.Equal(t, newPlayerState, *server.players[playerID])
 	assert.Equal(t, 1, len(server.eventQueue))
 }
@@ -155,13 +170,21 @@ func TestSendEventsToClients(t *testing.T) {
 	newPlayerState := state.AnimatedElementState{}
 	eventFromPlayer := event.Event{
 		Action:   "move",
-		PlayerID: "PlayerID",
+		PlayerID: "",
 		State:    &newPlayerState,
 	}
 	eventQueue <- eventFromPlayer
 	events := make([]event.Event, 1)
 	events[0] = eventFromPlayer
-	clientConnection.On("SendEventsToClient", timeFrame, events)
+	var eventCapture []event.Event
+	clientConnection.On("SendEventsToClient", timeFrame, mock.MatchedBy(
+		func(events []event.Event) bool {
+			eventCapture = events
+			return true
+		},
+	))
 	server.sendEventsToClients()
-	clientConnection.AssertCalled(t, "SendEventsToClient", timeFrame, events)
+	assert.Equal(t, timeFrame, eventCapture[0].TimeFrame)
+	assert.Equal(t, &newPlayerState, eventCapture[0].State)
+	assert.Equal(t, "move", eventCapture[0].Action)
 }

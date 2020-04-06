@@ -63,7 +63,6 @@ func TestRendererImpl(t *testing.T) {
 	renderer := createRenderer(screenWidth, screenHeight, renderMathHelper, fieldOfViewAngle, wallRendererProducer, worldElementRendererProducer)
 	worldMap := new(testWorld.MockWorldMap)
 	player := new(testPlayer.MockPlayer)
-	player.On("GetID").Return("playerID")
 	worldElement := new(testAnimatedElement.MockAnimatedElement)
 	elementRenderer := new(MockElementRenderer)
 	elementRenderer.On("getDistance").Return(0.1)
@@ -79,7 +78,7 @@ func TestRendererImpl(t *testing.T) {
 	worldElementRendererProducer.On("getRenderer", player, 0.7, worldElement).Return(worldElementRenderer)
 	worldElements := make(map[string]animatedelement.AnimatedElement)
 	worldElements["worldElementID"] = worldElement
-	renderer.Render(worldMap, player, worldElements, screen)
+	renderer.Render("playerID", worldMap, player, worldElements, screen)
 	wallRendererProducer.AssertExpectations(t)
 	worldElementRendererProducer.AssertExpectations(t)
 	worldElementRenderer.AssertExpectations(t)

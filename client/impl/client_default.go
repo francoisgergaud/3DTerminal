@@ -3,7 +3,7 @@ package impl
 import (
 	"fmt"
 	"francoisgergaud/3dGame/client"
-	"francoisgergaud/3dGame/client/connector"
+	"francoisgergaud/3dGame/client/consolemanager"
 	"francoisgergaud/3dGame/client/player"
 	playerImpl "francoisgergaud/3dGame/client/player/impl"
 	"francoisgergaud/3dGame/client/render"
@@ -11,6 +11,7 @@ import (
 	renderMathHelperImpl "francoisgergaud/3dGame/client/render/mathhelper/impl"
 	"francoisgergaud/3dGame/common/environment/animatedelement"
 	animatedElementImpl "francoisgergaud/3dGame/common/environment/animatedelement/impl"
+	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
 	mathHelper "francoisgergaud/3dGame/common/math/helper"
@@ -22,23 +23,23 @@ import (
 
 //Impl implements the Engine interface.
 type Impl struct {
-	screen       tcell.Screen
-	player       player.Player
-	worldMap     world.WorldMap
-	otherPlayers map[string]animatedelement.AnimatedElement
-	renderer     render.Renderer
-	quit         chan struct{}
-	frameRate    int
-	updateRate   int
-	mathHelper   mathHelper.MathHelper
+	screen                 tcell.Screen
+	player                 player.Player
+	playerID               string
+	worldMap               world.WorldMap
+	otherPlayers           map[string]animatedelement.AnimatedElement
+	otherPlayerLastUpdates map[string]uint32
+	renderer               render.Renderer
+	quit                   chan struct{}
+	frameRate              int
+	updateRate             int
+	mathHelper             mathHelper.MathHelper
+	consoleEventManager    consolemanager.ConsoleEventManager
+	shutdown               chan interface{}
 }
 
 //NewEngine provides a new engine.
-func NewEngine(screen tcell.Screen, engineConfig *client.Configuration, serverConnection connector.ServerConnection) (*Impl, error) {
-	if engineConfig.WorldMap == nil {
-		return nil, fmt.Errorf("world-map cannot be nil")
-	}
-	worldMap := engineConfig.WorldMap
+func NewEngine(screen tcell.Screen, consoleEventManager consolemanager.ConsoleEventManager, engineConfig *client.Configuration) (*Impl, error) {
 	raySampler, err := renderImpl.CreateRaySamplerForAnsiColorTerminal(
 		engineConfig.GradientRSFirst,
 		engineConfig.GradientRSMultiplicator,
@@ -55,64 +56,80 @@ func NewEngine(screen tcell.Screen, engineConfig *client.Configuration, serverCo
 	if err != nil {
 		return nil, fmt.Errorf("error while instantiating the math-helper: %w", err)
 	}
-	player := playerImpl.NewPlayer(engineConfig.PlayerID, engineConfig.PlayerConfiguration, worldMap, mathHelper, engineConfig.QuitChannel, serverConnection)
 	renderMathHelper := renderMathHelperImpl.NewRendererMathHelper(mathHelper)
 	renderer := renderImpl.CreateRenderer(engineConfig.ScreenWidth, engineConfig.ScreenHeight, raySampler, mathHelper, renderMathHelper, engineConfig.PlayerFieldOfViewAngle, engineConfig.Visibility)
-	otherPlayers := make(map[string]animatedelement.AnimatedElement)
-	for id, otherPlayerConfiguration := range engineConfig.OtherPlayerConfigurations {
-		otherPlayers[id] = animatedElementImpl.NewAnimatedElementWithState(id, otherPlayerConfiguration, worldMap, mathHelper, engineConfig.QuitChannel)
-	}
 	engine := Impl{
-		screen:       screen,
-		player:       player,
-		worldMap:     worldMap,
-		otherPlayers: otherPlayers,
-		renderer:     renderer,
-		quit:         engineConfig.QuitChannel,
-		frameRate:    engineConfig.FrameRate,
-		updateRate:   engineConfig.WorlUpdateRate,
-		mathHelper:   mathHelper,
+		screen:              screen,
+		renderer:            renderer,
+		quit:                engineConfig.QuitChannel,
+		frameRate:           engineConfig.FrameRate,
+		updateRate:          engineConfig.WorlUpdateRate,
+		mathHelper:          mathHelper,
+		consoleEventManager: consoleEventManager,
+		shutdown:            make(chan interface{}),
 	}
+	consoleEventManager.Listen()
 	return &engine, nil
+}
+
+//Initialize set the engine player and environment
+func (engine *Impl) Initialize(playerID string, playerState state.AnimatedElementState, worldMap world.WorldMap, otherPlayersState map[string]state.AnimatedElementState, serverTimeFrame uint32) {
+	engine.playerID = playerID
+	engine.player = playerImpl.NewPlayer(playerState, worldMap, engine.mathHelper, engine.quit)
+	engine.consoleEventManager.SetPlayer(engine.GetPlayer())
+	engine.worldMap = worldMap
+	engine.otherPlayers = make(map[string]animatedelement.AnimatedElement)
+	engine.otherPlayerLastUpdates = make(map[string]uint32)
+	for id, otherPlayerState := range otherPlayersState {
+		engine.otherPlayers[id] = animatedElementImpl.NewAnimatedElementWithState(otherPlayerState, worldMap, engine.mathHelper, engine.quit)
+		engine.otherPlayerLastUpdates[id] = serverTimeFrame
+	}
 }
 
 //StartEngine initializes the required element and start the engine to render world's elements in pseudo-3D
 func (engine *Impl) StartEngine() {
-	engine.screen.Clear()
-	engine.player.Start()
-	frameUpdateTicker := time.NewTicker(time.Duration(1000/engine.frameRate) * time.Millisecond)
-	worldUpdateTicker := time.NewTicker(time.Duration(1000/engine.updateRate) * time.Millisecond)
-	for _, worldelement := range engine.otherPlayers {
-		worldelement.Start()
-	}
-	for {
-		select {
-		case <-engine.quit:
-			frameUpdateTicker.Stop()
-			worldUpdateTicker.Stop()
-			engine.screen.SetStyle(tcell.StyleDefault)
-			engine.screen.Clear()
-			engine.screen.Fini()
-			return
-		case <-frameUpdateTicker.C:
-			engine.renderer.Render(engine.worldMap, engine.player, engine.otherPlayers, engine.screen)
-		case updateWorldTickerTime := <-worldUpdateTicker.C:
-			engine.player.GetUpdateChannel() <- updateWorldTickerTime
-			for _, worldelement := range engine.otherPlayers {
-				worldelement.GetUpdateChannel() <- updateWorldTickerTime
+	go func() {
+		engine.screen.Clear()
+		engine.player.Start()
+		frameUpdateTicker := time.NewTicker(time.Duration(1000/engine.frameRate) * time.Millisecond)
+		worldUpdateTicker := time.NewTicker(time.Duration(1000/engine.updateRate) * time.Millisecond)
+		for _, worldelement := range engine.otherPlayers {
+			worldelement.Start()
+		}
+		for {
+			select {
+			case <-engine.quit:
+				frameUpdateTicker.Stop()
+				worldUpdateTicker.Stop()
+				engine.screen.SetStyle(tcell.StyleDefault)
+				engine.screen.Clear()
+				engine.screen.Fini()
+				close(engine.shutdown)
+				return
+			case <-frameUpdateTicker.C:
+				engine.renderer.Render(engine.playerID, engine.worldMap, engine.player, engine.otherPlayers, engine.screen)
+			case updateWorldTickerTime := <-worldUpdateTicker.C:
+				engine.player.GetUpdateChannel() <- updateWorldTickerTime
+				for _, worldelement := range engine.otherPlayers {
+					worldelement.GetUpdateChannel() <- updateWorldTickerTime
+				}
 			}
 		}
-	}
+	}()
 }
 
 //ReceiveEventsFromServer manages the event received from the server
 func (engine *Impl) ReceiveEventsFromServer(events []event.Event) {
 	for _, event := range events {
-		if event.PlayerID != engine.player.GetID() {
+		if event.PlayerID != engine.playerID {
 			if event.Action == "join" {
-				engine.otherPlayers[event.PlayerID] = animatedElementImpl.NewAnimatedElementWithState(event.PlayerID, *event.State, engine.worldMap, engine.mathHelper, engine.quit)
+				engine.otherPlayers[event.PlayerID] = animatedElementImpl.NewAnimatedElementWithState(*event.State, engine.worldMap, engine.mathHelper, engine.quit)
+				engine.otherPlayerLastUpdates[event.PlayerID] = event.TimeFrame
 			} else if event.Action == "move" {
-				engine.otherPlayers[event.PlayerID].SetState(event.State)
+				if event.TimeFrame > engine.otherPlayerLastUpdates[event.PlayerID] {
+					engine.otherPlayers[event.PlayerID].SetState(event.State)
+					engine.otherPlayerLastUpdates[event.PlayerID] = event.TimeFrame
+				}
 			}
 		}
 	}
@@ -121,4 +138,9 @@ func (engine *Impl) ReceiveEventsFromServer(events []event.Event) {
 //GetPlayer returns the engine's player.
 func (engine *Impl) GetPlayer() player.Player {
 	return engine.player
+}
+
+//GetShutdown return the channel to be closed when shutdown is gracefully operated
+func (engine *Impl) GetShutdown() <-chan interface{} {
+	return engine.shutdown
 }

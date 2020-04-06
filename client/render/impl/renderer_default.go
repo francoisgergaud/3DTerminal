@@ -52,7 +52,7 @@ func createRenderer(screenWidth, screenHeight int, renderMathHelper mathhelper.R
 // 3 - sort these renderers by depth
 // 4 - render each renderer from the deepest to the nearest.
 // 5 - update the screen
-func (renderer *RendererImpl) Render(worldMap world.WorldMap, player player.Player, worldElements map[string]animatedelement.AnimatedElement, screen tcell.Screen) {
+func (renderer *RendererImpl) Render(playerID string, worldMap world.WorldMap, player player.Player, worldElements map[string]animatedelement.AnimatedElement, screen tcell.Screen) {
 	screen.Clear()
 	renderers := make([]elementRenderer, 0)
 	for columnIndex := 0; columnIndex < renderer.screenWidth; columnIndex++ {
@@ -60,7 +60,7 @@ func (renderer *RendererImpl) Render(worldMap world.WorldMap, player player.Play
 	}
 	if worldElements != nil {
 		for worldElementID, worldElement := range worldElements {
-			if worldElementID != player.GetID() {
+			if worldElementID != playerID {
 				worldElementRenderer := renderer.worldElementRendererProducer.getRenderer(player, renderer.fieldOfViewAngle, worldElement)
 				if worldElementRenderer != nil {
 					renderers = append(renderers, worldElementRenderer)

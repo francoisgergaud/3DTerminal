@@ -1,8 +1,6 @@
 package server
 
 import (
-	"francoisgergaud/3dGame/common/environment/animatedelement/state"
-	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
 	"francoisgergaud/3dGame/server/connector"
 )
@@ -13,7 +11,7 @@ import (
 // - update the environment inertnally (bots)
 // - communicate environment changes to players
 type Server interface {
-	RegisterPlayer(clientConnection connector.ClientConnection) (playerID string, worldMap world.WorldMap, state state.AnimatedElementState, otherPlayers map[string]state.AnimatedElementState)
+	RegisterPlayer(clientConnection connector.ClientConnection)
 	UnregisterClient(playerID string)
-	ReceiveEventsFromClient(events []event.Event)
+	ReceiveEventFromClient(event.Event)
 }

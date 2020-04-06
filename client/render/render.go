@@ -10,5 +10,5 @@ import (
 
 //Renderer provides the functionalities to render the environment's map.
 type Renderer interface {
-	Render(worldMap world.WorldMap, player player.Player, worldElements map[string]animatedelement.AnimatedElement, screen tcell.Screen)
+	Render(playerID string, worldMap world.WorldMap, player player.Player, worldElements map[string]animatedelement.AnimatedElement, screen tcell.Screen)
 }

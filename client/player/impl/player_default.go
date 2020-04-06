@@ -1,7 +1,6 @@
 package player
 
 import (
-	"francoisgergaud/3dGame/client/connector"
 	"francoisgergaud/3dGame/client/player"
 	"francoisgergaud/3dGame/common/environment/animatedelement"
 	animatedelementImpl "francoisgergaud/3dGame/common/environment/animatedelement/impl"
@@ -16,13 +15,11 @@ import (
 )
 
 //NewPlayer builds a new player from ithe input parameters.
-func NewPlayer(playerID string, playerState state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}, serverConnection connector.ServerConnection) player.Player {
+func NewPlayer(playerState state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) player.Player {
 	return &Impl{
-		AnimatedElement:  animatedelementImpl.NewAnimatedElementWithState(playerID, playerState, world, mathHelper, quit),
-		EventPublisher:   publisherImpl.NewEventPublisherImpl(),
-		serverConnection: serverConnection,
-		eventQueue:       make(chan event.Event, 100),
-		quitChannel:      quit,
+		AnimatedElement: animatedelementImpl.NewAnimatedElementWithState(playerState, world, mathHelper, quit),
+		EventPublisher:  publisherImpl.NewEventPublisherImpl(),
+		quitChannel:     quit,
 	}
 }
 
@@ -30,9 +27,7 @@ func NewPlayer(playerID string, playerState state.AnimatedElementState, world wo
 type Impl struct {
 	animatedelement.AnimatedElement
 	publisher.EventPublisher
-	serverConnection connector.ServerConnection
-	eventQueue       chan event.Event
-	quitChannel      chan struct{}
+	quitChannel chan struct{}
 }
 
 // Action the player according to the input key
@@ -64,21 +59,5 @@ func (p *Impl) Action(eventKey *tcell.EventKey) {
 			playerState.RotateDirection = state.Right
 		}
 	}
-	p.PublishEvent(event.Event{Action: "move", PlayerID: p.AnimatedElement.GetID(), State: p.GetState(), TimeFrame: 0})
-}
-
-//Start starts the player
-func (p *Impl) Start() {
-	p.AnimatedElement.Start()
-	p.RegisterListener(p.eventQueue)
-	go func() {
-		for {
-			select {
-			case eventFromPlayer := <-p.eventQueue:
-				p.serverConnection.SendEventsToServer(0, []event.Event{eventFromPlayer})
-			case <-p.quitChannel:
-				return
-			}
-		}
-	}()
+	p.PublishEvent(event.Event{Action: "move", State: p.GetState(), TimeFrame: 0})
 }

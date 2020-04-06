@@ -68,7 +68,7 @@ func NewBot(id string, worldMap world.WorldMap, mathHelper mathhelper.MathHelper
 }
 
 //NewServer is a server factory
-func NewServer(quit chan struct{}) (server.Server, error) {
+func NewServer(worldUpdateRate int, quit chan struct{}) (server.Server, error) {
 	server := new(Impl)
 	worldMap := world.NewWorldMap(NewWorldMap())
 	server.worldMap = worldMap
@@ -86,39 +86,54 @@ func NewServer(quit chan struct{}) (server.Server, error) {
 	server.bots[botID].RegisterListener(server.eventQueue)
 	server.quit = quit
 	server.clientUpdateRate = 10
-	server.botsUpdateRate = 10
+	server.botsUpdateRate = worldUpdateRate
 	go server.start()
 	go server.startBots()
 	return server, nil
 }
 
 //RegisterPlayer register a player and provide the environment
-func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) (playerID string, worldMap world.WorldMap, animatedElementState state.AnimatedElementState, otherPlayers map[string]state.AnimatedElementState) {
-	playerID = uuid.New().String()
+func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) {
+	playerID := uuid.New().String()
 	server.clientConnections[playerID] = clientConnection
-	animatedElementState.Position = &internalmath.Point2D{X: 5, Y: 5}
-	animatedElementState.Angle = 0.0
-	animatedElementState.Size = 0.5
-	animatedElementState.Velocity = 0.1
-	animatedElementState.StepAngle = 0.01
-	animatedElementState.Style = tcell.StyleDefault.Background(tcell.Color126)
-	server.players[playerID] = &animatedElementState
-	event := event.Event{
+	animatedElementState := &state.AnimatedElementState{
+		Position:  &internalmath.Point2D{X: 5, Y: 5},
+		Angle:     0.0,
+		Size:      0.5,
+		Velocity:  0.1,
+		StepAngle: 0.01,
+		Style:     tcell.StyleDefault.Background(tcell.Color126),
+	}
+	server.players[playerID] = animatedElementState
+	newPlayerEvent := event.Event{
 		PlayerID:  playerID,
-		State:     &animatedElementState,
+		State:     animatedElementState,
 		TimeFrame: server.timeFrame,
 		Action:    "join",
 	}
-	worldMap = server.worldMap.Clone()
-	server.eventQueue <- event
-	otherPlayers = make(map[string]state.AnimatedElementState)
+	worldMap := server.worldMap.Clone()
+	server.eventQueue <- newPlayerEvent
+	otherPlayers := make(map[string]state.AnimatedElementState)
 	for id, player := range server.players {
-		otherPlayers[id] = player.Clone()
+		if id != playerID {
+			otherPlayers[id] = player.Clone()
+		}
 	}
 	for id, bot := range server.bots {
 		otherPlayers[id] = bot.GetState().Clone()
 	}
-	return
+	timeFrame := server.timeFrame
+	extraData := make(map[string]interface{})
+	extraData["worldMap"] = worldMap
+	extraData["otherPlayers"] = otherPlayers
+	newPlayerInitializationEvent := event.Event{
+		Action:    "init",
+		PlayerID:  playerID,
+		State:     animatedElementState,
+		TimeFrame: timeFrame,
+		ExtraData: extraData,
+	}
+	clientConnection.SendEventsToClient(timeFrame, []event.Event{newPlayerInitializationEvent})
 }
 
 //UnregisterClient removes a player
@@ -132,24 +147,23 @@ func (server *Impl) UnregisterClient(playerID string) {
 	server.eventQueue <- event
 }
 
-//ReceiveEventsFromClient process a list of events coming from a client. It actually proces only the last event
+//ReceiveEventFromClient manage an event received from a client
 // as it is supposed to override the previous ones
-func (server *Impl) ReceiveEventsFromClient(events []event.Event) {
-	lastEvent := events[len(events)-1]
-	server.players[lastEvent.PlayerID] = lastEvent.State
-	server.eventQueue <- lastEvent
+func (server *Impl) ReceiveEventFromClient(event event.Event) {
+	server.eventQueue <- event
 }
 
 //The sync action is managed by sending the whole animated-element state when a change is done.
 func (server *Impl) sendEventsToClients() {
 	numberOfEvent := len(server.eventQueue)
 	if numberOfEvent > 0 {
-		events := make([]event.Event, numberOfEvent)
+		eventsToSend := make([]event.Event, len(server.eventQueue))
 		for i := 0; i < numberOfEvent; i++ {
-			events[i] = <-server.eventQueue
+			eventsToSend[i] = <-server.eventQueue
+			eventsToSend[i].TimeFrame = server.timeFrame
 		}
-		for _, connection := range server.clientConnections {
-			connection.SendEventsToClient(server.timeFrame, events)
+		for _, clientConnection := range server.clientConnections {
+			clientConnection.SendEventsToClient(server.timeFrame, eventsToSend)
 		}
 	}
 	server.timeFrame++

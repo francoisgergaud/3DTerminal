@@ -29,21 +29,23 @@ func (consoleEventManager *ConsoleEventManagerImpl) SetPlayer(player player.Play
 
 //Listen listens to the events emit by the terminal.
 func (consoleEventManager *ConsoleEventManagerImpl) Listen() {
-	for {
-		ev := consoleEventManager.screen.PollEvent()
-		switch ev := ev.(type) {
-		case *tcell.EventKey:
-			switch ev.Key() {
-			case tcell.KeyEscape, tcell.KeyEnter:
-				close(consoleEventManager.quitChannel)
-				return
-			default:
-				if consoleEventManager.player != nil {
-					consoleEventManager.player.Action(ev)
+	go func() {
+		for {
+			ev := consoleEventManager.screen.PollEvent()
+			switch ev := ev.(type) {
+			case *tcell.EventKey:
+				switch ev.Key() {
+				case tcell.KeyEscape, tcell.KeyEnter:
+					close(consoleEventManager.quitChannel)
+					return
+				default:
+					if consoleEventManager.player != nil {
+						consoleEventManager.player.Action(ev)
+					}
 				}
+			case *tcell.EventResize:
+				consoleEventManager.screen.Sync()
 			}
-		case *tcell.EventResize:
-			consoleEventManager.screen.Sync()
 		}
-	}
+	}()
 }

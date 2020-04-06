@@ -35,14 +35,14 @@ type Configuration struct {
 	GradientRSBackgroundRange []float32
 	//The gradient-ray-sampler background-colors, which apply to the upper-range ratio of the row defined in GradientRSBackgroundRange.
 	GradientRSBackgroundColors []int
-	//The player's configuration
-	PlayerConfiguration state.AnimatedElementState
 	//the player's identifier
 	PlayerID string
 	//The world-map
-	WorldMap world.WorldMap
+	//WorldMap world.WorldMap
+	//The player's configuration
+	//PlayerConfiguration state.AnimatedElementState
 	//the other-players.
-	OtherPlayerConfigurations map[string]state.AnimatedElementState
+	//OtherPlayerConfigurations map[string]state.AnimatedElementState
 	// the quit-channel
 	QuitChannel chan struct{}
 }
@@ -51,5 +51,7 @@ type Configuration struct {
 type Engine interface {
 	GetPlayer() player.Player
 	StartEngine()
+	Initialize(playerID string, playerState state.AnimatedElementState, worldMap world.WorldMap, otherPlayers map[string]state.AnimatedElementState, serverTimeFramce uint32)
 	ReceiveEventsFromServer(events []event.Event)
+	GetShutdown() <-chan interface{}
 }

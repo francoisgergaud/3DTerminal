@@ -7,8 +7,6 @@ import (
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
-	"francoisgergaud/3dGame/common/math"
-	testconnector "francoisgergaud/3dGame/internal/testutils/client/connector"
 	testConsoleManager "francoisgergaud/3dGame/internal/testutils/client/consolemanager"
 	testPlayer "francoisgergaud/3dGame/internal/testutils/client/player"
 	testanimatedelement "francoisgergaud/3dGame/internal/testutils/common/environment/animatedelement"
@@ -26,8 +24,8 @@ type MockBackgroundRenderer struct {
 	mock.Mock
 }
 
-func (mock *MockBackgroundRenderer) Render(worldMap world.WorldMap, player player.Player, worldElements map[string]animatedelement.AnimatedElement, screen tcell.Screen) {
-	mock.Called(worldMap, player, worldElements, screen)
+func (mock *MockBackgroundRenderer) Render(playerID string, worldMap world.WorldMap, player player.Player, worldElements map[string]animatedelement.AnimatedElement, screen tcell.Screen) {
+	mock.Called(playerID, worldMap, player, worldElements, screen)
 }
 
 func TestStartEngine(t *testing.T) {
@@ -40,6 +38,7 @@ func TestStartEngine(t *testing.T) {
 		UpdateChannel: playerUpdateChannel,
 		QuitChannel:   quitChannel,
 	}
+	playerID := "fakePlayerID"
 	worldElements := make(map[string]animatedelement.AnimatedElement)
 	worldElement := &testanimatedelement.MockAnimatedElement{
 		QuitChannel:   quitChannel,
@@ -54,7 +53,7 @@ func TestStartEngine(t *testing.T) {
 	screen.On("Clear")
 	screen.On("SetStyle", tcell.StyleDefault)
 	consoleEventListener.On("Listen")
-	bgRender.On("Render", worldMap, player, worldElements, screen)
+	bgRender.On("Render", playerID, worldMap, player, worldElements, screen)
 	player.On("Start")
 	player.On("GetUpdateChannel")
 	worldElement.On("Start")
@@ -62,6 +61,7 @@ func TestStartEngine(t *testing.T) {
 	engine := Impl{
 		screen:       screen,
 		player:       player,
+		playerID:     playerID,
 		worldMap:     worldMap,
 		otherPlayers: worldElements,
 		renderer:     bgRender,
@@ -79,18 +79,21 @@ func TestStartEngine(t *testing.T) {
 func TestNewEngine(t *testing.T) {
 	screen := new(testtcell.MockScreen)
 	engineConfig := createEngineConfigForTest()
-	serverConnection := new(testconnector.MockServerConnection)
-	engine, err := NewEngine(screen, engineConfig, serverConnection)
+	consoleManager := new(testConsoleManager.MockConsoleEventManager)
+	consoleManager.On("Listen")
+	engine, err := NewEngine(screen, consoleManager, engineConfig)
 	assert.Nil(t, err)
 	assert.Equal(t, screen, engine.screen)
 	assert.Equal(t, engineConfig.FrameRate, engine.frameRate)
 	assert.Equal(t, engineConfig.WorlUpdateRate, engine.updateRate)
-	assert.Equal(t, &engineConfig.PlayerConfiguration, engine.GetPlayer().GetState())
-	assert.Equal(t, engineConfig.OtherPlayerConfigurations["otherPlayerID"], *engine.otherPlayers["otherPlayerID"].GetState())
 }
 
 func TestReceiveJoinEventFromServer(t *testing.T) {
-	engine, _ := NewEngine(new(testtcell.MockScreen), createEngineConfigForTest(), nil)
+	//engine, _ := NewEngine(new(testtcell.MockScreen), createEngineConfigForTest())
+	engine := &Impl{
+		otherPlayers:           make(map[string]animatedelement.AnimatedElement),
+		otherPlayerLastUpdates: make(map[string]uint32),
+	}
 	events := make([]event.Event, 0)
 	newPlayerState := state.AnimatedElementState{}
 	events = append(events,
@@ -107,47 +110,28 @@ func TestReceiveJoinEventFromServer(t *testing.T) {
 }
 
 func TestReceiveMoveEventFromServer(t *testing.T) {
-	engine, _ := NewEngine(new(testtcell.MockScreen), createEngineConfigForTest(), nil)
+	otherPlayerID := "otherPlayerID"
+	otherPlayers := make(map[string]animatedelement.AnimatedElement)
+	engine := &Impl{
+		otherPlayers: otherPlayers,
+	}
+	mockAnimatedElement := testanimatedelement.MockAnimatedElement{}
+	otherPlayers[otherPlayerID] = &mockAnimatedElement
 	events := make([]event.Event, 0)
-	newPlayerState := state.AnimatedElementState{}
+	otherPlayerState := state.AnimatedElementState{}
 	events = append(events,
 		event.Event{
 			Action:   "move",
-			PlayerID: "otherPlayerID",
-			State:    &newPlayerState,
+			PlayerID: otherPlayerID,
+			State:    &otherPlayerState,
 		},
 	)
+	mockAnimatedElement.On("SetState", &otherPlayerState)
 	engine.ReceiveEventsFromServer(events)
-	playerRegistered, ok := engine.otherPlayers["otherPlayerID"]
-	assert.True(t, ok)
-	assert.Equal(t, &newPlayerState, playerRegistered.GetState())
-}
-
-func TestRegisterPlayer(t *testing.T) {
-	engine, _ := NewEngine(new(testtcell.MockScreen), createEngineConfigForTest(), nil)
-	events := make([]event.Event, 0)
-	newPlayerState := state.AnimatedElementState{}
-	events = append(events,
-		event.Event{
-			Action:   "move",
-			PlayerID: "otherPlayerID",
-			State:    &newPlayerState,
-		},
-	)
-	engine.ReceiveEventsFromServer(events)
-	playerRegistered, ok := engine.otherPlayers["otherPlayerID"]
-	assert.True(t, ok)
-	assert.Equal(t, &newPlayerState, playerRegistered.GetState())
 }
 
 func createEngineConfigForTest() *client.Configuration {
 	engineConfig := new(client.Configuration)
-	engineConfig.WorldMap = new(testworld.MockWorldMap)
-	playerState := state.AnimatedElementState{
-		Position: &math.Point2D{X: 2.6, Y: -2.9},
-		Angle:    0.5,
-	}
-	engineConfig.PlayerConfiguration = playerState
 	backgroundRange := []float32{0.5}
 	engineConfig.GradientRSBackgroundRange = backgroundRange
 	backgroundColors := []int{0, 1}
@@ -158,9 +142,6 @@ func createEngineConfigForTest() *client.Configuration {
 	engineConfig.GradientRSLimit = gradientRaySamplerMaxLimit
 	gradientRaySamplerFirst := 0.5
 	engineConfig.GradientRSFirst = gradientRaySamplerFirst
-	engineConfig.OtherPlayerConfigurations = make(map[string]state.AnimatedElementState)
-	otherPlayerState := state.AnimatedElementState{}
-	engineConfig.OtherPlayerConfigurations["otherPlayerID"] = otherPlayerState
 	frameRate := 40
 	worldUpdateRate := 50
 	engineConfig.FrameRate = frameRate
