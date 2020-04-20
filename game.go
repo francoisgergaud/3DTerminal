@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"francoisgergaud/3dGame/client"
-	localServerConnector "francoisgergaud/3dGame/client/connector/local/impl"
+	clientwebsocketconnector "francoisgergaud/3dGame/client/connector/websocket"
 	"francoisgergaud/3dGame/client/consolemanager"
 	consoleManagerImpl "francoisgergaud/3dGame/client/consolemanager/impl"
 	clientImpl "francoisgergaud/3dGame/client/impl"
 	serverImpl "francoisgergaud/3dGame/server/impl"
+	webserver "francoisgergaud/3dGame/server/net"
+	"time"
 
 	"github.com/gdamore/tcell"
 )
@@ -24,6 +26,7 @@ func (game *Game) Start() {
 	go game.consoleEventManager.Listen()
 	//wait until quit
 	<-game.quit
+	//wait for engine graceful shutdown
 	<-game.engine.GetShutdown()
 }
 
@@ -35,6 +38,7 @@ func InitGame(screen tcell.Screen) (*Game, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error while instantiating the server: %w", err)
 	}
+	//end for web-server only
 	engineConfiguration := &client.Configuration{
 		FrameRate:                  20,
 		WorlUpdateRate:             worldUpdateRate,
@@ -56,9 +60,17 @@ func InitGame(screen tcell.Screen) (*Game, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Error while initializing engine: %w", err)
 	}
-	//client-server initialization
-	serverConnection := localServerConnector.NewLocalServerConnection(engine, server, quit)
-	serverConnection.ConnectToServer()
+	//local client-server initialization
+	//serverConnection := localServerConnector.NewLocalServerConnection(engine, server, quit)
+	//serverConnection.ConnectToServer()
+
+	//websocket client-server initialization
+	serverURL := "localhost:9836"
+	webServer := webserver.NewWebServer(server, serverURL)
+	go webServer.Start()
+	time.Sleep(time.Millisecond)
+
+	clientwebsocketconnector.RegisterWebSocketServerConnectionToServer(engine, "ws://"+serverURL+"/join", quit)
 
 	//starts the game
 	return &Game{

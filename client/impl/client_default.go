@@ -39,7 +39,7 @@ type Impl struct {
 }
 
 //NewEngine provides a new engine.
-func NewEngine(screen tcell.Screen, consoleEventManager consolemanager.ConsoleEventManager, engineConfig *client.Configuration) (*Impl, error) {
+func NewEngine(screen tcell.Screen, consoleEventManager consolemanager.ConsoleEventManager, engineConfig *client.Configuration) (client.Engine, error) {
 	raySampler, err := renderImpl.CreateRaySamplerForAnsiColorTerminal(
 		engineConfig.GradientRSFirst,
 		engineConfig.GradientRSMultiplicator,

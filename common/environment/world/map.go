@@ -12,17 +12,17 @@ type WorldMap interface {
 
 // WorldMapImpl implements the WorldMap interface.
 type WorldMapImpl struct {
-	grid [][]int
+	Grid [][]int
 }
 
 // InitializeRandom : Initialize the map with random 1 or 0 values cells
 func (w *WorldMapImpl) InitializeRandom(width, height int) {
 	rand.Seed(86)
-	w.grid = make([][]int, width)
-	for rowIndex := range w.grid {
-		w.grid[rowIndex] = make([]int, height)
-		for columnIndex := range w.grid[rowIndex] {
-			w.grid[rowIndex][columnIndex] = rand.Intn(2)
+	w.Grid = make([][]int, width)
+	for rowIndex := range w.Grid {
+		w.Grid[rowIndex] = make([]int, height)
+		for columnIndex := range w.Grid[rowIndex] {
+			w.Grid[rowIndex][columnIndex] = rand.Intn(2)
 		}
 	}
 }
@@ -30,35 +30,35 @@ func (w *WorldMapImpl) InitializeRandom(width, height int) {
 //NewWorldMap builds a new world-map from the input parameters.
 func NewWorldMap(grid [][]int) WorldMap {
 	return &WorldMapImpl{
-		grid: grid,
+		Grid: grid,
 	}
 }
 
 // GetCellValue : returns the Map's cell value. If coordinate are out of map, returns 0
 func (w *WorldMapImpl) GetCellValue(x, y int) int {
-	if y >= 0 && y < len(w.grid) && x >= 0 && x < len(w.grid[y]) {
-		return w.grid[y][x]
+	if y >= 0 && y < len(w.Grid) && x >= 0 && x < len(w.Grid[y]) {
+		return w.Grid[y][x]
 	}
 	return 0
 }
 
 //Clone creates a deep-copy.
 func (w *WorldMapImpl) Clone() WorldMap {
-	if len(w.grid) > 0 {
-		grid := make([][]int, len(w.grid))
-		for i := 0; i < len(w.grid); i++ {
-			grid[i] = make([]int, len(w.grid[i]))
-			for j := 0; j < len(w.grid[i]); j++ {
-				grid[i][j] = w.grid[i][j]
+	if len(w.Grid) > 0 {
+		grid := make([][]int, len(w.Grid))
+		for i := 0; i < len(w.Grid); i++ {
+			grid[i] = make([]int, len(w.Grid[i]))
+			for j := 0; j < len(w.Grid[i]); j++ {
+				grid[i][j] = w.Grid[i][j]
 
 			}
 		}
 		return &WorldMapImpl{
-			grid: grid,
+			Grid: grid,
 		}
 	} else {
 		return &WorldMapImpl{
-			grid: make([][]int, 0),
+			Grid: make([][]int, 0),
 		}
 	}
 }

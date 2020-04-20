@@ -11,7 +11,7 @@ import (
 // - update the environment inertnally (bots)
 // - communicate environment changes to players
 type Server interface {
-	RegisterPlayer(clientConnection connector.ClientConnection)
+	RegisterPlayer(clientConnection connector.ClientConnection) string
 	UnregisterClient(playerID string)
 	ReceiveEventFromClient(event.Event)
 }

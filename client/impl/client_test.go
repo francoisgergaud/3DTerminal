@@ -83,9 +83,11 @@ func TestNewEngine(t *testing.T) {
 	consoleManager.On("Listen")
 	engine, err := NewEngine(screen, consoleManager, engineConfig)
 	assert.Nil(t, err)
-	assert.Equal(t, screen, engine.screen)
-	assert.Equal(t, engineConfig.FrameRate, engine.frameRate)
-	assert.Equal(t, engineConfig.WorlUpdateRate, engine.updateRate)
+	engineImpl, ok := engine.(*Impl)
+	assert.True(t, ok)
+	assert.Equal(t, screen, engineImpl.screen)
+	assert.Equal(t, engineConfig.FrameRate, engineImpl.frameRate)
+	assert.Equal(t, engineConfig.WorlUpdateRate, engineImpl.updateRate)
 }
 
 func TestReceiveJoinEventFromServer(t *testing.T) {

@@ -1,6 +1,7 @@
 package websocketconnector
 
 import (
+	"fmt"
 	"francoisgergaud/3dGame/common/event"
 	"francoisgergaud/3dGame/server"
 
@@ -14,7 +15,10 @@ func RegisterWebSocketClientConnectionToServer(wsConnection *websocket.Conn, ser
 		wsConnection: wsConnection,
 		send:         make(chan event.Event),
 	}
-	server.RegisterPlayer(websocketClientConnection)
+
+	go websocketClientConnection.writeToWebSocket()
+	websocketClientConnection.playerID = server.RegisterPlayer(websocketClientConnection)
+	go websocketClientConnection.readFromWebSocket()
 }
 
 //WebSocketClientConnection is a client-connection accessible through websocket
@@ -23,6 +27,7 @@ type WebSocketClientConnection struct {
 	// The websocket connection.
 	wsConnection *websocket.Conn
 	send         chan event.Event
+	playerID     string
 }
 
 //SendEventsToClient sends events to a client
@@ -33,26 +38,26 @@ func (clientConnection *WebSocketClientConnection) SendEventsToClient(timeFrame 
 }
 
 func (clientConnection *WebSocketClientConnection) readFromWebSocket() {
-	defer func() {
-		clientConnection.wsConnection.Close()
-	}()
+	eventsFromClient := make([]event.Event, 0)
 	for {
-		eventsFromClient := make([]event.Event, 0)
-		clientConnection.wsConnection.ReadJSON(eventsFromClient)
+		if err := clientConnection.wsConnection.ReadJSON(&eventsFromClient); err != nil {
+			fmt.Println(err)
+		}
 		for _, event := range eventsFromClient {
+			event.PlayerID = clientConnection.playerID
 			clientConnection.server.ReceiveEventFromClient(event)
 		}
 	}
 }
 
 func (clientConnection *WebSocketClientConnection) writeToWebSocket() {
-	defer func() {
-		clientConnection.wsConnection.Close()
-	}()
 	for {
+		//eventsToClient := make([]event.Event, 1)
 		select {
-		case event := <-clientConnection.send:
-			clientConnection.wsConnection.WriteJSON(event)
+		case /*eventsToClient[0] =*/ eventToClient := <-clientConnection.send:
+			if err := clientConnection.wsConnection.WriteJSON([]event.Event{eventToClient}); err != nil {
+				fmt.Println(err)
+			}
 		}
 	}
 }

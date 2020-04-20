@@ -93,7 +93,7 @@ func NewServer(worldUpdateRate int, quit chan struct{}) (server.Server, error) {
 }
 
 //RegisterPlayer register a player and provide the environment
-func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) {
+func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) string {
 	playerID := uuid.New().String()
 	server.clientConnections[playerID] = clientConnection
 	animatedElementState := &state.AnimatedElementState{
@@ -134,6 +134,7 @@ func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) 
 		ExtraData: extraData,
 	}
 	clientConnection.SendEventsToClient(timeFrame, []event.Event{newPlayerInitializationEvent})
+	return playerID
 }
 
 //UnregisterClient removes a player
