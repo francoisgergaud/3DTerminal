@@ -22,7 +22,7 @@ import (
 type Impl struct {
 	clientConnections map[string]connector.ClientConnection
 	worldMap          world.WorldMap
-	players           map[string]*state.AnimatedElementState
+	players           map[string]*state.AnimatedElementState //must be changed to animated-element: server must know the extrapolated position of players
 	bots              map[string]bot.Bot
 	timeFrame         uint32
 	eventQueue        chan event.Event
@@ -151,6 +151,7 @@ func (server *Impl) UnregisterClient(playerID string) {
 //ReceiveEventFromClient manage an event received from a client
 // as it is supposed to override the previous ones
 func (server *Impl) ReceiveEventFromClient(event event.Event) {
+	server.players[event.PlayerID] = event.State
 	server.eventQueue <- event
 }
 

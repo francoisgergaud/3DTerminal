@@ -27,11 +27,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%v\n", e)
 		panic(e)
 	}
-	game, err := InitGame(screen)
+	err := InitGame(screen)
 	if err != nil {
 		panic(err)
 	}
-	game.Start()
-	// fmt.Println("starting web-server.")
-	// log.Fatal(http.ListenAndServe("localhost:8081", http.FileServer(http.Dir("resources/web"))))
 }
