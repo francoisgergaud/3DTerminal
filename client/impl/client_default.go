@@ -125,6 +125,7 @@ func (engine *Impl) ReceiveEventsFromServer(events []event.Event) {
 			if event.Action == "join" {
 				engine.otherPlayers[event.PlayerID] = animatedElementImpl.NewAnimatedElementWithState(*event.State, engine.worldMap, engine.mathHelper, engine.quit)
 				engine.otherPlayerLastUpdates[event.PlayerID] = event.TimeFrame
+				engine.otherPlayers[event.PlayerID].Start()
 			} else if event.Action == "move" {
 				if event.TimeFrame > engine.otherPlayerLastUpdates[event.PlayerID] {
 					engine.otherPlayers[event.PlayerID].SetState(event.State)

@@ -26,7 +26,6 @@ func InitGame(screen tcell.Screen) error {
 	quit := make(chan struct{})
 	worldUpdateRate := 20 //world-update frequency, for both client and server
 	consoleEventManager := consoleManagerImpl.NewConsoleEventManager(screen, quit)
-	go consoleEventManager.Listen()
 	var err error
 	var engine client.Engine
 	var server server.Server

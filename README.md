@@ -17,7 +17,7 @@ Then the following remote-launch configuration is used:
 }
 ``` 
 
-To debug Using VSCode, as Delve cannot be used in interqctive mode, the headless mode is used:
+To debug Using VSCode, as Delve cannot be used in interactive mode, the headless mode is used:
 ```dlv debug --headless --listen=:2345 --log --api-version=2```
 Then the following remote-launch configuration is used:
 ```
@@ -38,4 +38,11 @@ Inside the source folder:
 and then
 ```$GOPATH/bin/3dGame````
 
+#client/server
+* launch server
+```go build && ./3dGame --mode remoteServer```
+* launch client
+```go build && ./3dGame --mode remoteClient```
+* debug client headless (using config file above)
+```dlv debug --headless --listen=:2345 --log --api-version=2 -- --mode remoteClient```
 
