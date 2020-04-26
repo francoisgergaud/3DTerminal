@@ -2,6 +2,8 @@ package impl
 
 import (
 	"fmt"
+	"francoisgergaud/3dGame/common/environment/animatedelement"
+	animatedelementImpl "francoisgergaud/3dGame/common/environment/animatedelement/impl"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
@@ -22,13 +24,14 @@ import (
 type Impl struct {
 	clientConnections map[string]connector.ClientConnection
 	worldMap          world.WorldMap
-	players           map[string]*state.AnimatedElementState //must be changed to animated-element: server must know the extrapolated position of players
+	players           map[string]animatedelement.AnimatedElement
 	bots              map[string]bot.Bot
 	timeFrame         uint32
 	eventQueue        chan event.Event
 	quit              chan struct{}
 	clientUpdateRate  int
 	botsUpdateRate    int
+	mathHelper        mathhelper.MathHelper
 }
 
 //NewWorldMap provides a new world-map.
@@ -74,11 +77,12 @@ func NewServer(worldUpdateRate int, quit chan struct{}) (server.Server, error) {
 	server.worldMap = worldMap
 	server.bots = make(map[string]bot.Bot)
 	mathHelper, err := mathhelper.NewMathHelper(new(raycaster.RayCasterImpl))
+	server.mathHelper = mathHelper
 	if err != nil {
 		return nil, fmt.Errorf("error while instantiating the math-helper: %w", err)
 	}
 	server.timeFrame = 0
-	server.players = make(map[string]*state.AnimatedElementState)
+	server.players = make(map[string]animatedelement.AnimatedElement)
 	server.eventQueue = make(chan event.Event, 100)
 	server.clientConnections = make(map[string]connector.ClientConnection)
 	botID := uuid.New().String()
@@ -96,7 +100,7 @@ func NewServer(worldUpdateRate int, quit chan struct{}) (server.Server, error) {
 func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) string {
 	playerID := uuid.New().String()
 	server.clientConnections[playerID] = clientConnection
-	animatedElementState := &state.AnimatedElementState{
+	animatedElementState := state.AnimatedElementState{
 		Position:  &internalmath.Point2D{X: 5, Y: 5},
 		Angle:     0.0,
 		Size:      0.5,
@@ -104,10 +108,10 @@ func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) 
 		StepAngle: 0.01,
 		Style:     tcell.StyleDefault.Background(tcell.Color126),
 	}
-	server.players[playerID] = animatedElementState
+	server.players[playerID] = animatedelementImpl.NewAnimatedElementWithState(animatedElementState, server.worldMap, server.mathHelper, server.quit)
 	newPlayerEvent := event.Event{
 		PlayerID:  playerID,
-		State:     animatedElementState,
+		State:     &animatedElementState,
 		TimeFrame: server.timeFrame,
 		Action:    "join",
 	}
@@ -116,7 +120,7 @@ func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) 
 	otherPlayers := make(map[string]state.AnimatedElementState)
 	for id, player := range server.players {
 		if id != playerID {
-			otherPlayers[id] = player.Clone()
+			otherPlayers[id] = player.GetState().Clone()
 		}
 	}
 	for id, bot := range server.bots {
@@ -129,11 +133,12 @@ func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) 
 	newPlayerInitializationEvent := event.Event{
 		Action:    "init",
 		PlayerID:  playerID,
-		State:     animatedElementState,
+		State:     &animatedElementState,
 		TimeFrame: timeFrame,
 		ExtraData: extraData,
 	}
 	clientConnection.SendEventsToClient(timeFrame, []event.Event{newPlayerInitializationEvent})
+	server.players[playerID].Start()
 	return playerID
 }
 
@@ -151,7 +156,7 @@ func (server *Impl) UnregisterClient(playerID string) {
 //ReceiveEventFromClient manage an event received from a client
 // as it is supposed to override the previous ones
 func (server *Impl) ReceiveEventFromClient(event event.Event) {
-	server.players[event.PlayerID] = event.State
+	server.players[event.PlayerID].SetState(event.State)
 	server.eventQueue <- event
 }
 
@@ -194,6 +199,9 @@ func (server *Impl) startBots() {
 		case <-botsTicker.C:
 			for _, bot := range server.bots {
 				bot.Move()
+			}
+			for _, player := range server.players {
+				player.Move()
 			}
 		}
 	}

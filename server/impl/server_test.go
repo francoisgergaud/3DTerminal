@@ -1,8 +1,10 @@
 package impl
 
 import (
+	"francoisgergaud/3dGame/common/environment/animatedelement"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/event"
+	testanimatedelement "francoisgergaud/3dGame/internal/testutils/common/environment/animatedelement"
 	"francoisgergaud/3dGame/server/bot"
 	"francoisgergaud/3dGame/server/connector"
 	"testing"
@@ -30,7 +32,7 @@ func TestRegisterPlayer(t *testing.T) {
 	quit := make(chan struct{})
 	clientConnections := make(map[string]connector.ClientConnection)
 	worldMap := new(testworld.MockWorldMap)
-	serverPlayers := make(map[string]*state.AnimatedElementState)
+	serverPlayers := make(map[string]animatedelement.AnimatedElement)
 	bots := make(map[string]bot.Bot)
 	timeFrame := uint32(0)
 	eventQueue := make(chan event.Event, 100)
@@ -78,11 +80,11 @@ func TestUnregisterClient(t *testing.T) {
 	quit := make(chan struct{})
 	clientConnections := make(map[string]connector.ClientConnection)
 	worldMap := new(testworld.MockWorldMap)
-	palyers := make(map[string]*state.AnimatedElementState)
+	palyers := make(map[string]animatedelement.AnimatedElement)
 	clientConnection := new(testconnector.MockClientConnection)
 	playerID := "playerTest"
 	clientConnections[playerID] = clientConnection
-	palyers[playerID] = new(state.AnimatedElementState)
+	palyers[playerID] = new(testanimatedelement.MockAnimatedElement)
 	bots := make(map[string]bot.Bot)
 	timeFrame := uint32(0)
 	eventQueue := make(chan event.Event, 100)
@@ -109,11 +111,12 @@ func TestReceiveEventFromClient(t *testing.T) {
 	quit := make(chan struct{})
 	clientConnections := make(map[string]connector.ClientConnection)
 	worldMap := new(testworld.MockWorldMap)
-	palyers := make(map[string]*state.AnimatedElementState)
+	palyers := make(map[string]animatedelement.AnimatedElement)
 	clientConnection := new(testconnector.MockClientConnection)
 	playerID := "playerTest"
 	clientConnections[playerID] = clientConnection
-	palyers[playerID] = new(state.AnimatedElementState)
+	mockAnimatedElement := new(testanimatedelement.MockAnimatedElement)
+	palyers[playerID] = mockAnimatedElement
 	bots := make(map[string]bot.Bot)
 	timeFrame := uint32(0)
 	eventQueue := make(chan event.Event, 100)
@@ -136,8 +139,8 @@ func TestReceiveEventFromClient(t *testing.T) {
 		PlayerID: playerID,
 		State:    &newPlayerState,
 	}
+	mockAnimatedElement.On("SetState", &newPlayerState)
 	server.ReceiveEventFromClient(eventFromPlayer)
-	assert.Equal(t, newPlayerState, *server.players[playerID])
 	assert.Equal(t, 1, len(server.eventQueue))
 }
 
@@ -145,11 +148,11 @@ func TestSendEventsToClients(t *testing.T) {
 	quit := make(chan struct{})
 	clientConnections := make(map[string]connector.ClientConnection)
 	worldMap := new(testworld.MockWorldMap)
-	palyers := make(map[string]*state.AnimatedElementState)
+	palyers := make(map[string]animatedelement.AnimatedElement)
 	clientConnection := new(testconnector.MockClientConnection)
 	playerID := "playerTest"
 	clientConnections[playerID] = clientConnection
-	palyers[playerID] = new(state.AnimatedElementState)
+	palyers[playerID] = new(testanimatedelement.MockAnimatedElement)
 	bots := make(map[string]bot.Bot)
 	timeFrame := uint32(2)
 	eventQueue := make(chan event.Event, 100)
