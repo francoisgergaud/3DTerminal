@@ -1,6 +1,7 @@
 package client
 
 import (
+	"francoisgergaud/3dGame/client/connector"
 	"francoisgergaud/3dGame/client/player"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
@@ -54,4 +55,5 @@ type Engine interface {
 	Initialize(playerID string, playerState state.AnimatedElementState, worldMap world.WorldMap, otherPlayers map[string]state.AnimatedElementState, serverTimeFramce uint32)
 	ReceiveEventsFromServer(events []event.Event)
 	GetShutdown() <-chan interface{}
+	SetConnectionToServer(connectionToServer connector.ServerConnector)
 }

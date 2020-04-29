@@ -3,6 +3,7 @@ package impl
 import (
 	"fmt"
 	"francoisgergaud/3dGame/client"
+	"francoisgergaud/3dGame/client/connector"
 	"francoisgergaud/3dGame/client/consolemanager"
 	"francoisgergaud/3dGame/client/player"
 	playerImpl "francoisgergaud/3dGame/client/player/impl"
@@ -23,19 +24,23 @@ import (
 
 //Impl implements the Engine interface.
 type Impl struct {
-	screen                 tcell.Screen
-	player                 player.Player
-	playerID               string
-	worldMap               world.WorldMap
-	otherPlayers           map[string]animatedelement.AnimatedElement
-	otherPlayerLastUpdates map[string]uint32
-	renderer               render.Renderer
-	quit                   chan struct{}
-	frameRate              int
-	updateRate             int
-	mathHelper             mathHelper.MathHelper
-	consoleEventManager    consolemanager.ConsoleEventManager
-	shutdown               chan interface{}
+	screen                                tcell.Screen
+	player                                player.Player
+	playerID                              string
+	worldMap                              world.WorldMap
+	otherPlayers                          map[string]animatedelement.AnimatedElement
+	otherPlayerLastUpdates                map[string]uint32
+	renderer                              render.Renderer
+	playerEventQueue                      chan event.Event
+	preInitializationEventFromServerQueue chan event.Event
+	quit                                  chan struct{}
+	frameRate                             int
+	updateRate                            int
+	mathHelper                            mathHelper.MathHelper
+	consoleEventManager                   consolemanager.ConsoleEventManager
+	shutdown                              chan interface{}
+	intialized                            bool
+	connectionToServer                    connector.ServerConnector
 }
 
 //NewEngine provides a new engine.
@@ -59,14 +64,17 @@ func NewEngine(screen tcell.Screen, consoleEventManager consolemanager.ConsoleEv
 	renderMathHelper := renderMathHelperImpl.NewRendererMathHelper(mathHelper)
 	renderer := renderImpl.CreateRenderer(engineConfig.ScreenWidth, engineConfig.ScreenHeight, raySampler, mathHelper, renderMathHelper, engineConfig.PlayerFieldOfViewAngle, engineConfig.Visibility)
 	engine := Impl{
-		screen:              screen,
-		renderer:            renderer,
-		quit:                engineConfig.QuitChannel,
-		frameRate:           engineConfig.FrameRate,
-		updateRate:          engineConfig.WorlUpdateRate,
-		mathHelper:          mathHelper,
-		consoleEventManager: consoleEventManager,
-		shutdown:            make(chan interface{}),
+		screen:                                screen,
+		renderer:                              renderer,
+		playerEventQueue:                      make(chan event.Event),
+		preInitializationEventFromServerQueue: make(chan event.Event, 100),
+		quit:                                  engineConfig.QuitChannel,
+		frameRate:                             engineConfig.FrameRate,
+		updateRate:                            engineConfig.WorlUpdateRate,
+		mathHelper:                            mathHelper,
+		consoleEventManager:                   consoleEventManager,
+		shutdown:                              make(chan interface{}),
+		intialized:                            false,
 	}
 	consoleEventManager.Listen()
 	return &engine, nil
@@ -120,6 +128,43 @@ func (engine *Impl) StartEngine() {
 
 //ReceiveEventsFromServer manages the event received from the server
 func (engine *Impl) ReceiveEventsFromServer(events []event.Event) {
+	if engine.intialized {
+		engine.processOtherPlayerEvents(events)
+	} else {
+		for _, eventFromServer := range events {
+			if eventFromServer.Action == "init" {
+				//initialize and start the client
+				engine.playerID = eventFromServer.PlayerID
+				worldMap, _ := eventFromServer.ExtraData["worldMap"].(world.WorldMap)
+				otherPlayerStates, _ := eventFromServer.ExtraData["otherPlayers"].(map[string]state.AnimatedElementState)
+				otherPlayerStatesClone := make(map[string]state.AnimatedElementState)
+				for otherPlayerID, otherPlayerState := range otherPlayerStates {
+					otherPlayerStatesClone[otherPlayerID] = otherPlayerState.Clone()
+				}
+				engine.Initialize(eventFromServer.PlayerID, eventFromServer.State.Clone(), worldMap.Clone(), otherPlayerStatesClone, eventFromServer.TimeFrame)
+				engine.StartEngine()
+				//propagate events from player
+				engine.GetPlayer().RegisterListener(engine.playerEventQueue)
+				//process all previous events
+				numberOfPreInitializationEvents := len(engine.preInitializationEventFromServerQueue)
+				if numberOfPreInitializationEvents > 0 {
+					preInitializationEvents := make([]event.Event, numberOfPreInitializationEvents)
+					for i := 0; i < numberOfPreInitializationEvents; i++ {
+						preInitializationEvents[i] = <-engine.preInitializationEventFromServerQueue
+					}
+					engine.processOtherPlayerEvents(preInitializationEvents)
+				}
+				go engine.listenPlayer()
+				//change the state
+				engine.intialized = true
+			} else {
+				engine.preInitializationEventFromServerQueue <- eventFromServer
+			}
+		}
+	}
+}
+
+func (engine *Impl) processOtherPlayerEvents(events []event.Event) {
 	for _, event := range events {
 		if event.PlayerID != engine.playerID {
 			if event.Action == "join" {
@@ -144,4 +189,20 @@ func (engine *Impl) GetPlayer() player.Player {
 //GetShutdown return the channel to be closed when shutdown is gracefully operated
 func (engine *Impl) GetShutdown() <-chan interface{} {
 	return engine.shutdown
+}
+
+func (engine *Impl) SetConnectionToServer(connectionToServer connector.ServerConnector) {
+	engine.connectionToServer = connectionToServer
+}
+
+func (engine *Impl) listenPlayer() {
+	//eventsFromPlayer := make([]event.Event, 1)
+	for {
+		select {
+		case /*eventsFromPlayer[0] =*/ eventFromPlayer := <-engine.playerEventQueue:
+			engine.connectionToServer.NotifyServer([]event.Event{eventFromPlayer})
+		case <-engine.quit:
+			engine.connectionToServer.Disconnect()
+		}
+	}
 }

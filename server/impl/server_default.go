@@ -137,7 +137,7 @@ func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) 
 		TimeFrame: timeFrame,
 		ExtraData: extraData,
 	}
-	clientConnection.SendEventsToClient(timeFrame, []event.Event{newPlayerInitializationEvent})
+	clientConnection.SendEventsToClient([]event.Event{newPlayerInitializationEvent})
 	server.players[playerID].Start()
 	return playerID
 }
@@ -170,7 +170,7 @@ func (server *Impl) sendEventsToClients() {
 			eventsToSend[i].TimeFrame = server.timeFrame
 		}
 		for _, clientConnection := range server.clientConnections {
-			clientConnection.SendEventsToClient(server.timeFrame, eventsToSend)
+			clientConnection.SendEventsToClient(eventsToSend)
 		}
 	}
 	server.timeFrame++

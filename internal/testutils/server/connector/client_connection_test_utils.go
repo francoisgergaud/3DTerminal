@@ -12,11 +12,11 @@ type MockClientConnection struct {
 }
 
 //ReceiveEventsFromClient mocks the method of the same name
-func (mock *MockClientConnection) ReceiveEventsFromClient(timeFrame uint32, events []event.Event) {
-	mock.Called(timeFrame, events)
+func (mock *MockClientConnection) ReceiveEventsFromClient(events []event.Event) {
+	mock.Called(events)
 }
 
 //SendEventsToClient mocks the method of the same name
-func (mock *MockClientConnection) SendEventsToClient(timeFrame uint32, events []event.Event) {
-	mock.Called(timeFrame, events)
+func (mock *MockClientConnection) SendEventsToClient(events []event.Event) {
+	mock.Called(events)
 }

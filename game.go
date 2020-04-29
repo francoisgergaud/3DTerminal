@@ -38,8 +38,8 @@ func InitGame(screen tcell.Screen) error {
 		if err != nil {
 			return fmt.Errorf("Error while initializing engine: %w", err)
 		}
-		serverConnection := localServerConnector.NewLocalServerConnection(engine, server, quit)
-		serverConnection.ConnectToServer()
+		localServerConnector.NewLocalServerConnection(engine, server, quit)
+		//serverConnection.ConnectToServer()
 	} else if *mode == "remote" {
 		server, err = serverImpl.NewServer(worldUpdateRate, quit)
 		if err != nil {
@@ -53,13 +53,13 @@ func InitGame(screen tcell.Screen) error {
 		webServer := webserver.NewWebServer(server, serverURL)
 		go webServer.Start()
 		time.Sleep(time.Millisecond)
-		clientwebsocketconnector.RegisterWebSocketServerConnectionToServer(engine, "ws://"+serverURL+"/join", quit)
+		clientwebsocketconnector.NewWebSocketServerConnection(engine, "ws://"+serverURL+"/join", quit)
 	} else if *mode == "remoteClient" {
 		engine, err = createClient(screen, quit, worldUpdateRate, consoleEventManager)
 		if err != nil {
 			return fmt.Errorf("Error while initializing engine: %w", err)
 		}
-		clientwebsocketconnector.RegisterWebSocketServerConnectionToServer(engine, "ws://"+*remoteAddress+"/join", quit)
+		clientwebsocketconnector.NewWebSocketServerConnection(engine, "ws://"+*remoteAddress+"/join", quit)
 	} else if *mode == "remoteServer" {
 		server, err = serverImpl.NewServer(worldUpdateRate, quit)
 		if err != nil {

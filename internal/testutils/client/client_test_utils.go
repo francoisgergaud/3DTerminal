@@ -1,6 +1,7 @@
 package testclient
 
 import (
+	"francoisgergaud/3dGame/client/connector"
 	"francoisgergaud/3dGame/client/player"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
@@ -39,4 +40,9 @@ func (mock *MockEngine) Initialize(playerID string, playerState state.AnimatedEl
 func (mock *MockEngine) GetShutdown() <-chan interface{} {
 	args := mock.Called()
 	return args.Get(0).(chan interface{})
+}
+
+//SetConnectionToServer mocks the method of the same name
+func (mock *MockEngine) SetConnectionToServer(connectionToServer connector.ServerConnector) {
+	mock.Called(connectionToServer)
 }

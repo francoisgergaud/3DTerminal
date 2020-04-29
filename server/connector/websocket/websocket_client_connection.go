@@ -31,7 +31,7 @@ type WebSocketClientConnection struct {
 }
 
 //SendEventsToClient sends events to a client
-func (clientConnection *WebSocketClientConnection) SendEventsToClient(timeFrame uint32, events []event.Event) {
+func (clientConnection *WebSocketClientConnection) SendEventsToClient(events []event.Event) {
 	for _, event := range events {
 		clientConnection.send <- event
 	}

@@ -6,5 +6,5 @@ import (
 
 //ClientConnection is a server-side connection to a client.
 type ClientConnection interface {
-	SendEventsToClient(timeFrame uint32, events []event.Event)
+	SendEventsToClient(events []event.Event)
 }
