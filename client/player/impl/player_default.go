@@ -15,7 +15,7 @@ import (
 )
 
 //NewPlayer builds a new player from ithe input parameters.
-func NewPlayer(playerState state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) player.Player {
+func NewPlayer(playerState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) player.Player {
 	return &Impl{
 		AnimatedElement: animatedelementImpl.NewAnimatedElementWithState(playerState, world, mathHelper, quit),
 		EventPublisher:  publisherImpl.NewEventPublisherImpl(),

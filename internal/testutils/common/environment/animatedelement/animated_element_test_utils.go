@@ -1,11 +1,25 @@
 package testanimatedelement
 
 import (
+	"francoisgergaud/3dGame/common/environment/animatedelement"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
+	"francoisgergaud/3dGame/common/environment/world"
+	"francoisgergaud/3dGame/common/math/helper"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 )
+
+//MockAnimatedElementFactory mocks an animated-element factory
+type MockAnimatedElementFactory struct {
+	mock.Mock
+}
+
+//NewAnimatedElementWithState mocks the creation of new animated-element
+func (mock *MockAnimatedElementFactory) NewAnimatedElementWithState(animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement {
+	args := mock.Called(animatedElementState, world, mathHelper, quit)
+	return args.Get(0).(animatedelement.AnimatedElement)
+}
 
 //MockAnimatedElement mocks a world-element.
 type MockAnimatedElement struct {

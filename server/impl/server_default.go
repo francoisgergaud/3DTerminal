@@ -108,7 +108,7 @@ func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) 
 		StepAngle: 0.01,
 		Style:     tcell.StyleDefault.Background(tcell.Color126),
 	}
-	server.players[playerID] = animatedelementImpl.NewAnimatedElementWithState(animatedElementState, server.worldMap, server.mathHelper, server.quit)
+	server.players[playerID] = animatedelementImpl.NewAnimatedElementWithState(&animatedElementState, server.worldMap, server.mathHelper, server.quit)
 	newPlayerEvent := event.Event{
 		PlayerID:  playerID,
 		State:     &animatedElementState,

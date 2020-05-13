@@ -15,8 +15,10 @@ import (
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
+	"francoisgergaud/3dGame/common/math/helper"
 	mathHelper "francoisgergaud/3dGame/common/math/helper"
 	"francoisgergaud/3dGame/common/math/raycaster"
+	"francoisgergaud/3dGame/common/runner"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -24,27 +26,30 @@ import (
 
 //Impl implements the Engine interface.
 type Impl struct {
+	runner.Runner
 	screen                                tcell.Screen
-	player                                player.Player
 	playerID                              string
 	worldMap                              world.WorldMap
 	otherPlayers                          map[string]animatedelement.AnimatedElement
+	player                                player.Player
 	otherPlayerLastUpdates                map[string]uint32
 	renderer                              render.Renderer
-	playerEventQueue                      chan event.Event
+	playerListener                        *playerListenerImpl
+	worldElementUpdater                   *worldElementUpdaterImpl
 	preInitializationEventFromServerQueue chan event.Event
 	quit                                  chan struct{}
 	frameRate                             int
-	updateRate                            int
 	mathHelper                            mathHelper.MathHelper
 	consoleEventManager                   consolemanager.ConsoleEventManager
 	shutdown                              chan interface{}
-	intialized                            bool
+	initialized                           bool
 	connectionToServer                    connector.ServerConnector
+	animatedElementFactory                func(animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper mathHelper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement
+	playerFactory                         func(playerState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) player.Player
 }
 
 //NewEngine provides a new engine.
-func NewEngine(screen tcell.Screen, consoleEventManager consolemanager.ConsoleEventManager, engineConfig *client.Configuration) (client.Engine, error) {
+func NewEngine(screen tcell.Screen, consoleEventManager consolemanager.ConsoleEventManager, engineConfig *client.Configuration) (*Impl, error) {
 	raySampler, err := renderImpl.CreateRaySamplerForAnsiColorTerminal(
 		engineConfig.GradientRSFirst,
 		engineConfig.GradientRSMultiplicator,
@@ -58,6 +63,7 @@ func NewEngine(screen tcell.Screen, consoleEventManager consolemanager.ConsoleEv
 		return nil, fmt.Errorf("error while instantiating the ray-sampler: %w", err)
 	}
 	mathHelper, err := mathHelper.NewMathHelper(new(raycaster.RayCasterImpl))
+	//mathHelper, err := mathHelper.NewMathHelper(new(raycaster.RayCasterImpl))
 	if err != nil {
 		return nil, fmt.Errorf("error while instantiating the math-helper: %w", err)
 	}
@@ -66,109 +72,59 @@ func NewEngine(screen tcell.Screen, consoleEventManager consolemanager.ConsoleEv
 	engine := Impl{
 		screen:                                screen,
 		renderer:                              renderer,
-		playerEventQueue:                      make(chan event.Event),
 		preInitializationEventFromServerQueue: make(chan event.Event, 100),
 		quit:                                  engineConfig.QuitChannel,
 		frameRate:                             engineConfig.FrameRate,
-		updateRate:                            engineConfig.WorlUpdateRate,
 		mathHelper:                            mathHelper,
 		consoleEventManager:                   consoleEventManager,
 		shutdown:                              make(chan interface{}),
-		intialized:                            false,
+		initialized:                           false,
+		animatedElementFactory:                animatedElementImpl.NewAnimatedElementWithState,
+		playerFactory:                         playerImpl.NewPlayer,
+		playerListener: &playerListenerImpl{
+			playerEventQueue: make(chan event.Event),
+			quit:             engineConfig.QuitChannel,
+		},
 	}
+	worldElementUpdater := &worldElementUpdaterImpl{
+		updateRate: engineConfig.WorlUpdateRate,
+		quit:       engineConfig.QuitChannel,
+		engine:     &engine,
+	}
+	engine.worldElementUpdater = worldElementUpdater
+	engine.Runner = &runner.AsyncRunner{}
 	consoleEventManager.Listen()
 	return &engine, nil
 }
 
 //Initialize set the engine player and environment
-func (engine *Impl) Initialize(playerID string, playerState state.AnimatedElementState, worldMap world.WorldMap, otherPlayersState map[string]state.AnimatedElementState, serverTimeFrame uint32) {
+func (engine *Impl) initialize(playerID string, playerState *state.AnimatedElementState, worldMap world.WorldMap, otherPlayersState map[string]*state.AnimatedElementState, serverTimeFrame uint32) {
 	engine.playerID = playerID
-	engine.player = playerImpl.NewPlayer(playerState, worldMap, engine.mathHelper, engine.quit)
-	engine.consoleEventManager.SetPlayer(engine.GetPlayer())
+	engine.player = engine.playerFactory(playerState, worldMap, engine.mathHelper, engine.quit)
+	engine.consoleEventManager.SetPlayer(engine.player)
 	engine.worldMap = worldMap
 	engine.otherPlayers = make(map[string]animatedelement.AnimatedElement)
 	engine.otherPlayerLastUpdates = make(map[string]uint32)
 	for id, otherPlayerState := range otherPlayersState {
-		engine.otherPlayers[id] = animatedElementImpl.NewAnimatedElementWithState(otherPlayerState, worldMap, engine.mathHelper, engine.quit)
+		engine.otherPlayers[id] = engine.animatedElementFactory(otherPlayerState, worldMap, engine.mathHelper, engine.quit)
 		engine.otherPlayerLastUpdates[id] = serverTimeFrame
 	}
 }
 
-//StartEngine initializes the required element and start the engine to render world's elements in pseudo-3D
-func (engine *Impl) StartEngine() {
-	go func() {
-		engine.screen.Clear()
-		engine.player.Start()
-		frameUpdateTicker := time.NewTicker(time.Duration(1000/engine.frameRate) * time.Millisecond)
-		worldUpdateTicker := time.NewTicker(time.Duration(1000/engine.updateRate) * time.Millisecond)
-		for _, worldelement := range engine.otherPlayers {
-			worldelement.Start()
-		}
-		for {
-			select {
-			case <-engine.quit:
-				frameUpdateTicker.Stop()
-				worldUpdateTicker.Stop()
-				engine.screen.SetStyle(tcell.StyleDefault)
-				engine.screen.Clear()
-				engine.screen.Fini()
-				close(engine.shutdown)
-				return
-			case <-frameUpdateTicker.C:
-				engine.renderer.Render(engine.playerID, engine.worldMap, engine.player, engine.otherPlayers, engine.screen)
-			case updateWorldTickerTime := <-worldUpdateTicker.C:
-				engine.player.GetUpdateChannel() <- updateWorldTickerTime
-				for _, worldelement := range engine.otherPlayers {
-					worldelement.GetUpdateChannel() <- updateWorldTickerTime
-				}
-			}
-		}
-	}()
-}
-
 //ReceiveEventsFromServer manages the event received from the server
 func (engine *Impl) ReceiveEventsFromServer(events []event.Event) {
-	if engine.intialized {
-		engine.processOtherPlayerEvents(events)
+	if engine.initialized {
+		engine.processPostInitializationEvents(events)
 	} else {
-		for _, eventFromServer := range events {
-			if eventFromServer.Action == "init" {
-				//initialize and start the client
-				engine.playerID = eventFromServer.PlayerID
-				worldMap, _ := eventFromServer.ExtraData["worldMap"].(world.WorldMap)
-				otherPlayerStates, _ := eventFromServer.ExtraData["otherPlayers"].(map[string]state.AnimatedElementState)
-				otherPlayerStatesClone := make(map[string]state.AnimatedElementState)
-				for otherPlayerID, otherPlayerState := range otherPlayerStates {
-					otherPlayerStatesClone[otherPlayerID] = otherPlayerState.Clone()
-				}
-				engine.Initialize(eventFromServer.PlayerID, eventFromServer.State.Clone(), worldMap.Clone(), otherPlayerStatesClone, eventFromServer.TimeFrame)
-				engine.StartEngine()
-				//propagate events from player
-				engine.GetPlayer().RegisterListener(engine.playerEventQueue)
-				//process all previous events
-				numberOfPreInitializationEvents := len(engine.preInitializationEventFromServerQueue)
-				if numberOfPreInitializationEvents > 0 {
-					preInitializationEvents := make([]event.Event, numberOfPreInitializationEvents)
-					for i := 0; i < numberOfPreInitializationEvents; i++ {
-						preInitializationEvents[i] = <-engine.preInitializationEventFromServerQueue
-					}
-					engine.processOtherPlayerEvents(preInitializationEvents)
-				}
-				go engine.listenPlayer()
-				//change the state
-				engine.intialized = true
-			} else {
-				engine.preInitializationEventFromServerQueue <- eventFromServer
-			}
-		}
+		engine.processPreInitializationEvents(events)
 	}
 }
 
-func (engine *Impl) processOtherPlayerEvents(events []event.Event) {
+func (engine *Impl) processPostInitializationEvents(events []event.Event) {
 	for _, event := range events {
 		if event.PlayerID != engine.playerID {
 			if event.Action == "join" {
-				engine.otherPlayers[event.PlayerID] = animatedElementImpl.NewAnimatedElementWithState(*event.State, engine.worldMap, engine.mathHelper, engine.quit)
+				engine.otherPlayers[event.PlayerID] = animatedElementImpl.NewAnimatedElementWithState(event.State, engine.worldMap, engine.mathHelper, engine.quit)
 				engine.otherPlayerLastUpdates[event.PlayerID] = event.TimeFrame
 				engine.otherPlayers[event.PlayerID].Start()
 			} else if event.Action == "move" {
@@ -181,28 +137,134 @@ func (engine *Impl) processOtherPlayerEvents(events []event.Event) {
 	}
 }
 
-//GetPlayer returns the engine's player.
-func (engine *Impl) GetPlayer() player.Player {
+func (engine *Impl) processPreInitializationEvents(events []event.Event) {
+	var initializationEvent *event.Event
+	for _, eventFromServer := range events {
+		if eventFromServer.Action == "init" {
+			initializationEvent = &eventFromServer
+		} else {
+			//TODO: manage properly the pre-initialization-events queue (don't block if the queue is full)
+			engine.preInitializationEventFromServerQueue <- eventFromServer
+		}
+	}
+	if initializationEvent != nil {
+		//initialize and start the client
+		engine.playerID = initializationEvent.PlayerID
+		worldMap, _ := initializationEvent.ExtraData["worldMap"].(world.WorldMap)
+		//TODO: manage cast error (use a warn in log file)
+		otherPlayerStates, _ := initializationEvent.ExtraData["otherPlayers"].(map[string]state.AnimatedElementState)
+		otherPlayerStatesClone := make(map[string]*state.AnimatedElementState)
+		for otherPlayerID, otherPlayerState := range otherPlayerStates {
+			otherPlayerStateClone := otherPlayerState.Clone()
+			otherPlayerStatesClone[otherPlayerID] = &otherPlayerStateClone
+		}
+		playerStateClone := initializationEvent.State.Clone()
+		engine.initialize(initializationEvent.PlayerID, &playerStateClone, worldMap.Clone(), otherPlayerStatesClone, initializationEvent.TimeFrame)
+		engine.Runner.Start(engine)
+		engine.Runner.Start(engine.worldElementUpdater)
+		//propagate events from player
+		engine.Player().RegisterListener(engine.playerListener.playerEventQueue)
+		//process all previous events
+		numberOfPreInitializationEvents := len(engine.preInitializationEventFromServerQueue)
+		if numberOfPreInitializationEvents > 0 {
+			preInitializationEvents := make([]event.Event, numberOfPreInitializationEvents)
+			for i := 0; i < numberOfPreInitializationEvents; i++ {
+				preInitializationEvents[i] = <-engine.preInitializationEventFromServerQueue
+			}
+			engine.processPostInitializationEvents(preInitializationEvents)
+		}
+		engine.Runner.Start(engine.playerListener)
+		//change the state
+		engine.initialized = true
+	}
+}
+
+//Player returns the engine's player.
+func (engine *Impl) Player() player.Player {
 	return engine.player
 }
 
-//GetShutdown return the channel to be closed when shutdown is gracefully operated
-func (engine *Impl) GetShutdown() <-chan interface{} {
+//OtherPlayers returns the engine's other players.
+func (engine *Impl) OtherPlayers() map[string]animatedelement.AnimatedElement {
+	return engine.otherPlayers
+}
+
+//Shutdown return the channel to be closed when shutdown is gracefully operated
+func (engine *Impl) Shutdown() <-chan interface{} {
 	return engine.shutdown
 }
 
-func (engine *Impl) SetConnectionToServer(connectionToServer connector.ServerConnector) {
+//ConnectToServer set the connection to server once initialized
+func (engine *Impl) ConnectToServer(connectionToServer connector.ServerConnector) {
 	engine.connectionToServer = connectionToServer
+	engine.playerListener.connectionToServer = connectionToServer
 }
 
-func (engine *Impl) listenPlayer() {
-	//eventsFromPlayer := make([]event.Event, 1)
+//Run initializes the required element and start the engine to render world's elements in pseudo-3D
+func (engine *Impl) Run() {
+	engine.screen.Clear()
+	//TODO: manage division by 0 in a cleaner way
+	frameUpdateTicker := time.NewTicker(time.Duration(1000/engine.frameRate) * time.Millisecond)
 	for {
 		select {
-		case /*eventsFromPlayer[0] =*/ eventFromPlayer := <-engine.playerEventQueue:
-			engine.connectionToServer.NotifyServer([]event.Event{eventFromPlayer})
 		case <-engine.quit:
-			engine.connectionToServer.Disconnect()
+			frameUpdateTicker.Stop()
+			engine.screen.SetStyle(tcell.StyleDefault)
+			engine.screen.Clear()
+			engine.screen.Fini()
+			if engine.connectionToServer != nil {
+				engine.connectionToServer.Disconnect()
+			}
+			close(engine.shutdown)
+			return
+		case <-frameUpdateTicker.C:
+			engine.renderer.Render(engine.playerID, engine.worldMap, engine.player, engine.otherPlayers, engine.screen)
+		}
+	}
+}
+
+//playerListenerImpl results from an internal decompostion of the client
+type playerListenerImpl struct {
+	playerEventQueue   chan event.Event
+	quit               chan struct{}
+	connectionToServer connector.ServerConnector
+}
+
+func (playerListener *playerListenerImpl) Run() {
+	for {
+		select {
+		case /*eventsFromPlayer[0] =*/ eventFromPlayer := <-playerListener.playerEventQueue:
+			playerListener.connectionToServer.NotifyServer([]event.Event{eventFromPlayer})
+		case <-playerListener.quit:
+			return
+		}
+	}
+}
+
+//worldElementUpdaterImpl results from an internal decompostion of the client to manage the client-side worl-update
+type worldElementUpdaterImpl struct {
+	updateRate int
+	engine     client.Engine
+	quit       chan struct{}
+}
+
+//loop of an internal clock events to update the player an world-elements based of their state (direction, position, velocity etc...)
+func (worldElementUpdater *worldElementUpdaterImpl) Run() {
+	worldElementUpdater.engine.Player().Start()
+	for _, worldelement := range worldElementUpdater.engine.OtherPlayers() {
+		worldelement.Start()
+	}
+	worldUpdateTicker := time.NewTicker(time.Duration(1000/worldElementUpdater.updateRate) * time.Millisecond)
+	for {
+		select {
+		case <-worldElementUpdater.quit:
+			worldUpdateTicker.Stop()
+			return
+		case updateWorldTickerTime := <-worldUpdateTicker.C:
+			worldElementUpdater.engine.Player().GetUpdateChannel() <- updateWorldTickerTime
+			for _, worldelement := range worldElementUpdater.engine.OtherPlayers() {
+				worldelement.GetUpdateChannel() <- updateWorldTickerTime
+			}
 		}
 	}
 }

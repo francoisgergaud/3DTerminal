@@ -3,14 +3,21 @@ package impl
 import (
 	"francoisgergaud/3dGame/client"
 	"francoisgergaud/3dGame/client/player"
+	"francoisgergaud/3dGame/client/render/impl"
 	"francoisgergaud/3dGame/common/environment/animatedelement"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
+	"francoisgergaud/3dGame/common/math/helper"
+	"francoisgergaud/3dGame/common/runner"
+	testclient "francoisgergaud/3dGame/internal/testutils/client"
+	testconnector "francoisgergaud/3dGame/internal/testutils/client/connector"
 	testConsoleManager "francoisgergaud/3dGame/internal/testutils/client/consolemanager"
 	testPlayer "francoisgergaud/3dGame/internal/testutils/client/player"
 	testanimatedelement "francoisgergaud/3dGame/internal/testutils/common/environment/animatedelement"
 	testworld "francoisgergaud/3dGame/internal/testutils/common/environment/world"
+	testhelper "francoisgergaud/3dGame/internal/testutils/common/math/helper"
+	testrunner "francoisgergaud/3dGame/internal/testutils/common/runner"
 	testtcell "francoisgergaud/3dGame/internal/testutils/tcell"
 	"testing"
 	"time"
@@ -28,36 +35,58 @@ func (mock *MockBackgroundRenderer) Render(playerID string, worldMap world.World
 	mock.Called(playerID, worldMap, player, worldElements, screen)
 }
 
-func TestStartEngine(t *testing.T) {
+func TestNewEngine(t *testing.T) {
+	screen := new(testtcell.MockScreen)
+	engineConfig := &client.Configuration{
+		GradientRSBackgroundRange:  []float32{0.5},
+		GradientRSBackgroundColors: []int{0, 1},
+		GradientRSMultiplicator:    2.0,
+		GradientRSLimit:            3.0,
+		GradientRSFirst:            0.5,
+		FrameRate:                  40,
+		WorlUpdateRate:             50,
+	}
+	consoleManager := new(testConsoleManager.MockConsoleEventManager)
+	consoleManager.On("Listen")
+	engine, err := NewEngine(screen, consoleManager, engineConfig)
+	assert.Nil(t, err)
+	assert.Equal(t, screen, engine.screen)
+	assert.IsType(t, &helper.MathHelperImpl{}, engine.mathHelper)
+	assert.IsType(t, &impl.RendererImpl{}, engine.renderer)
+	assert.NotNil(t, engine.preInitializationEventFromServerQueue)
+	assert.Equal(t, engineConfig.FrameRate, engine.frameRate)
+	assert.Equal(t, engineConfig.QuitChannel, engine.quit)
+	assert.Equal(t, consoleManager, engine.consoleEventManager)
+	assert.NotNil(t, engine.shutdown)
+	assert.False(t, engine.initialized)
+	assert.NotNil(t, engine.animatedElementFactory)
+	assert.NotNil(t, engine.playerFactory)
+	//test the player-listener
+	assert.Equal(t, engineConfig.QuitChannel, engine.playerListener.quit)
+	assert.NotNil(t, engine.playerListener.playerEventQueue)
+	assert.Nil(t, engine.playerListener.connectionToServer)
+	assert.Equal(t, engineConfig.WorlUpdateRate, engine.worldElementUpdater.updateRate)
+	assert.Equal(t, engineConfig.QuitChannel, engine.worldElementUpdater.quit)
+	assert.Equal(t, engine, engine.worldElementUpdater.engine)
+	assert.IsType(t, &runner.AsyncRunner{}, engine.Runner)
+	mock.AssertExpectationsForObjects(t, consoleManager, screen)
+}
+
+func TestEngineRun(t *testing.T) {
 	screen := new(testtcell.MockScreen)
 	worldMap := new(testworld.MockWorldMap)
-	playerUpdateChannel := make(chan time.Time)
 	quitChannel := make(chan struct{})
-	worldElementUpdateChannel := make(chan time.Time)
-	player := &testPlayer.MockPlayer{
-		UpdateChannel: playerUpdateChannel,
-		QuitChannel:   quitChannel,
-	}
+	player := &testPlayer.MockPlayer{}
 	playerID := "fakePlayerID"
 	worldElements := make(map[string]animatedelement.AnimatedElement)
-	worldElement := &testanimatedelement.MockAnimatedElement{
-		QuitChannel:   quitChannel,
-		UpdateChannel: worldElementUpdateChannel,
-	}
-	worldElements["worldElementID"] = worldElement
 	bgRender := new(MockBackgroundRenderer)
-	consoleEventListener := new(testConsoleManager.MockConsoleEventManager)
 	//to shorten the test of the timer. A ticker is generated every 1000/250 ms
-	frameRate := 250
-	updateRate := 500
+	frameRate := 1000
 	screen.On("Clear")
 	screen.On("SetStyle", tcell.StyleDefault)
-	consoleEventListener.On("Listen")
+	screen.On("Fini")
 	bgRender.On("Render", playerID, worldMap, player, worldElements, screen)
-	player.On("Start")
-	player.On("GetUpdateChannel")
-	worldElement.On("Start")
-	worldElement.On("GetUpdateChannel")
+	shutdown := make(chan interface{})
 	engine := Impl{
 		screen:       screen,
 		player:       player,
@@ -67,34 +96,56 @@ func TestStartEngine(t *testing.T) {
 		renderer:     bgRender,
 		quit:         quitChannel,
 		frameRate:    frameRate,
-		updateRate:   updateRate,
+		shutdown:     shutdown,
 	}
-	go func() {
-		<-time.After(time.Millisecond * time.Duration((2*1000)/frameRate))
-		close(quitChannel)
-	}()
-	engine.StartEngine()
+	//Run is blocking
+	go engine.Run()
+	<-time.After(time.Millisecond * 2)
+	close(quitChannel)
+	<-shutdown
+	mock.AssertExpectationsForObjects(t, bgRender, screen, player)
 }
 
-func TestNewEngine(t *testing.T) {
-	screen := new(testtcell.MockScreen)
-	engineConfig := createEngineConfigForTest()
-	consoleManager := new(testConsoleManager.MockConsoleEventManager)
-	consoleManager.On("Listen")
-	engine, err := NewEngine(screen, consoleManager, engineConfig)
-	assert.Nil(t, err)
-	engineImpl, ok := engine.(*Impl)
-	assert.True(t, ok)
-	assert.Equal(t, screen, engineImpl.screen)
-	assert.Equal(t, engineConfig.FrameRate, engineImpl.frameRate)
-	assert.Equal(t, engineConfig.WorlUpdateRate, engineImpl.updateRate)
+func TestWorldUpdaterRun(t *testing.T) {
+	quitChannel := make(chan struct{})
+	playerUpdateChannel := make(chan time.Time)
+	worldElementUpdateChannel := make(chan time.Time)
+	player := &testPlayer.MockPlayer{
+		UpdateChannel: playerUpdateChannel,
+		QuitChannel:   quitChannel,
+	}
+	worldElements := make(map[string]animatedelement.AnimatedElement)
+	worldElement := &testanimatedelement.MockAnimatedElement{
+		QuitChannel:   quitChannel,
+		UpdateChannel: worldElementUpdateChannel,
+	}
+	worldElements["worldElementID"] = worldElement
+
+	player.On("Start")
+	player.On("GetUpdateChannel").Return(playerUpdateChannel)
+	worldElement.On("Start")
+	worldElement.On("GetUpdateChannel").Return(worldElementUpdateChannel)
+
+	engine := new(testclient.MockEngine)
+	engine.On("Player").Return(player)
+	engine.On("OtherPlayers").Return(worldElements)
+
+	worldElementUpdater := worldElementUpdaterImpl{
+		updateRate: 1000,
+		engine:     engine,
+		quit:       quitChannel,
+	}
+	go worldElementUpdater.Run()
+	<-time.After(time.Millisecond * 2)
+	close(quitChannel)
+	mock.AssertExpectationsForObjects(t, player, worldElement, engine)
 }
 
 func TestReceiveJoinEventFromServer(t *testing.T) {
-	//engine, _ := NewEngine(new(testtcell.MockScreen), createEngineConfigForTest())
 	engine := &Impl{
 		otherPlayers:           make(map[string]animatedelement.AnimatedElement),
 		otherPlayerLastUpdates: make(map[string]uint32),
+		initialized:            true,
 	}
 	events := make([]event.Event, 0)
 	newPlayerState := state.AnimatedElementState{}
@@ -111,11 +162,12 @@ func TestReceiveJoinEventFromServer(t *testing.T) {
 	assert.Equal(t, &newPlayerState, playerRegistered.GetState())
 }
 
-func TestReceiveMoveEventFromServer(t *testing.T) {
+func TestReceiveMovePastEventFromServer(t *testing.T) {
 	otherPlayerID := "otherPlayerID"
 	otherPlayers := make(map[string]animatedelement.AnimatedElement)
 	engine := &Impl{
 		otherPlayers: otherPlayers,
+		initialized:  true,
 	}
 	mockAnimatedElement := testanimatedelement.MockAnimatedElement{}
 	otherPlayers[otherPlayerID] = &mockAnimatedElement
@@ -128,25 +180,138 @@ func TestReceiveMoveEventFromServer(t *testing.T) {
 			State:    &otherPlayerState,
 		},
 	)
-	mockAnimatedElement.On("SetState", &otherPlayerState)
 	engine.ReceiveEventsFromServer(events)
+	mock.AssertExpectationsForObjects(t, &mockAnimatedElement)
 }
 
-func createEngineConfigForTest() *client.Configuration {
-	engineConfig := new(client.Configuration)
-	backgroundRange := []float32{0.5}
-	engineConfig.GradientRSBackgroundRange = backgroundRange
-	backgroundColors := []int{0, 1}
-	engineConfig.GradientRSBackgroundColors = backgroundColors
-	gradientRaySamplerMultiplicator := 2.0
-	engineConfig.GradientRSMultiplicator = gradientRaySamplerMultiplicator
-	gradientRaySamplerMaxLimit := 3.0
-	engineConfig.GradientRSLimit = gradientRaySamplerMaxLimit
-	gradientRaySamplerFirst := 0.5
-	engineConfig.GradientRSFirst = gradientRaySamplerFirst
-	frameRate := 40
-	worldUpdateRate := 50
-	engineConfig.FrameRate = frameRate
-	engineConfig.WorlUpdateRate = worldUpdateRate
-	return engineConfig
+func TestReceiveMoveEventFromServer(t *testing.T) {
+	otherPlayerID := "otherPlayerID"
+	otherPlayers := make(map[string]animatedelement.AnimatedElement)
+	otherPlayerLastUpdates := make(map[string]uint32)
+	otherPlayerLastUpdates["otherPlayerID"] = 1
+	engine := &Impl{
+		otherPlayers:           otherPlayers,
+		initialized:            true,
+		otherPlayerLastUpdates: otherPlayerLastUpdates,
+	}
+	mockAnimatedElement := testanimatedelement.MockAnimatedElement{}
+	otherPlayers[otherPlayerID] = &mockAnimatedElement
+	events := make([]event.Event, 0)
+	otherPlayerState := state.AnimatedElementState{}
+	events = append(events,
+		event.Event{
+			Action:    "move",
+			PlayerID:  otherPlayerID,
+			State:     &otherPlayerState,
+			TimeFrame: 2,
+		},
+	)
+	mockAnimatedElement.On("SetState", &otherPlayerState)
+	engine.ReceiveEventsFromServer(events)
+	mock.AssertExpectationsForObjects(t, &mockAnimatedElement)
+}
+
+//TODO: decompose the client: this method is too complex to test
+func TestReceiveInitializationEvents(t *testing.T) {
+	playerID := "playerID"
+	playerState := state.AnimatedElementState{}
+	worldMap := new(testworld.MockWorldMap)
+	worldMapCloned := new(testworld.MockWorldMap)
+	worldMap.On("Clone").Return(worldMapCloned)
+	otherPlayerStates := make(map[string]state.AnimatedElementState)
+	otherPlayerID := "otherPlayerID"
+	otherPlayerState := state.AnimatedElementState{}
+	otherPlayerStates[otherPlayerID] = otherPlayerState
+	playerFactory := testPlayer.MockPlayerFactory{}
+	mathHelper := new(testhelper.MockMathHelper)
+	quit := make(chan struct{})
+	player := new(testPlayer.MockPlayer)
+	player.On("RegisterListener", mock.AnythingOfType("chan<- event.Event"))
+	playerFactory.On("NewPlayer", &playerState, worldMapCloned, mathHelper, quit).Return(player)
+	consoleEventManager := new(testConsoleManager.MockConsoleEventManager)
+	consoleEventManager.On("SetPlayer", player)
+	animatedElementFactory := testanimatedelement.MockAnimatedElementFactory{}
+	otherPlayerAnimatedElement := new(testanimatedelement.MockAnimatedElement)
+	animatedElementFactory.On("NewAnimatedElementWithState", &otherPlayerState, worldMapCloned, mathHelper, quit).Return(otherPlayerAnimatedElement)
+	runner := new(testrunner.MockRunner)
+	worldElementUpdater := &worldElementUpdaterImpl{}
+	playerListener := &playerListenerImpl{}
+	engine := &Impl{
+		initialized:                           false,
+		mathHelper:                            mathHelper,
+		playerFactory:                         playerFactory.NewPlayer,
+		animatedElementFactory:                animatedElementFactory.NewAnimatedElementWithState,
+		consoleEventManager:                   consoleEventManager,
+		quit:                                  quit,
+		playerListener:                        playerListener,
+		worldElementUpdater:                   worldElementUpdater,
+		Runner:                                runner,
+		preInitializationEventFromServerQueue: make(chan event.Event, 100),
+	}
+	runner.On("Start", engine)
+	runner.On("Start", worldElementUpdater)
+	runner.On("Start", playerListener)
+	preInitializationEvent := event.Event{}
+	initEvent := event.Event{
+		PlayerID: playerID,
+		Action:   "init",
+		State:    &playerState,
+		ExtraData: map[string]interface{}{
+			"worldMap": worldMap,
+			"otherPlayers": map[string]state.AnimatedElementState{
+				otherPlayerID: otherPlayerState,
+			},
+		},
+	}
+	engine.ReceiveEventsFromServer([]event.Event{preInitializationEvent, initEvent})
+	assert.Equal(t, playerID, engine.playerID)
+	assert.Equal(t, worldMapCloned, engine.worldMap)
+	assert.Equal(t, player, engine.player)
+	assert.Equal(t, otherPlayerAnimatedElement, engine.otherPlayers[otherPlayerID])
+	assert.True(t, engine.initialized)
+	mock.AssertExpectationsForObjects(t, player, worldMap, &playerFactory, consoleEventManager, &animatedElementFactory, runner)
+}
+
+func TestPlayerListenerRun(t *testing.T) {
+	quit := make(chan struct{})
+	playerEventQueue := make(chan event.Event)
+	eventFromPlayer := event.Event{}
+	serverConnection := new(testconnector.MockServerConnection)
+	serverConnection.On("NotifyServer", []event.Event{eventFromPlayer}).Return(nil)
+	playerListener := playerListenerImpl{
+		playerEventQueue:   playerEventQueue,
+		quit:               quit,
+		connectionToServer: serverConnection,
+	}
+	go playerListener.Run()
+	playerEventQueue <- eventFromPlayer
+	<-time.After(time.Millisecond * 2)
+	close(quit)
+	mock.AssertExpectationsForObjects(t, serverConnection)
+}
+
+func TestOtherPlayers(t *testing.T) {
+	otherPlayers := make(map[string]animatedelement.AnimatedElement)
+	engine := &Impl{
+		otherPlayers: otherPlayers,
+	}
+	assert.Equal(t, otherPlayers, engine.OtherPlayers())
+}
+
+func TestShutdown(t *testing.T) {
+	shutdown := make(chan interface{})
+	engine := &Impl{
+		shutdown: shutdown,
+	}
+	assert.EqualValues(t, shutdown, engine.Shutdown())
+}
+
+func TestConnectToServer(t *testing.T) {
+	serverConnection := new(testconnector.MockServerConnection)
+	engine := &Impl{
+		playerListener: &playerListenerImpl{},
+	}
+	engine.ConnectToServer(serverConnection)
+	assert.Same(t, serverConnection, engine.connectionToServer)
+	assert.Same(t, serverConnection, engine.playerListener.connectionToServer)
 }

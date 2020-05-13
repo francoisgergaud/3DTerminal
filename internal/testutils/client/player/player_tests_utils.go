@@ -1,14 +1,28 @@
 package testplayer
 
 import (
+	"francoisgergaud/3dGame/client/player"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
+	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
 	"francoisgergaud/3dGame/common/math"
+	"francoisgergaud/3dGame/common/math/helper"
 	"time"
 
 	"github.com/gdamore/tcell"
 	"github.com/stretchr/testify/mock"
 )
+
+//MockPlayerFactory
+type MockPlayerFactory struct {
+	mock.Mock
+}
+
+//NewPlayer mocks the player factory
+func (mock *MockPlayerFactory) NewPlayer(playerState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) player.Player {
+	args := mock.Called(playerState, world, mathHelper, quit)
+	return args.Get(0).(player.Player)
+}
 
 //MockPlayer mocks a character
 type MockPlayer struct {

@@ -24,13 +24,13 @@ func NewAnimatedElement(initialPosition *innerMath.Point2D, initialAngle, veloci
 		MoveDirection:   moveDirection,
 		RotateDirection: rotateDirection,
 	}
-	return NewAnimatedElementWithState(state, world, mathHelper, quit)
+	return NewAnimatedElementWithState(&state, world, mathHelper, quit)
 }
 
 //NewAnimatedElementWithState builds a new pointer to AnimatedElementImpl.
-func NewAnimatedElementWithState(animatedElementState state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement {
+func NewAnimatedElementWithState(animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement {
 	return &AnimatedElementImpl{
-		state:         &animatedElementState,
+		state:         animatedElementState,
 		world:         world,
 		updateChannel: make(chan time.Time),
 		quitChannel:   quit,

@@ -189,7 +189,7 @@ func TestSetState(t *testing.T) {
 	mathHelper := new(testmath.MockMathHelper)
 	worldMap.On("GetCellValue", 1, 1).Return(1)
 	quit := make(chan struct{})
-	animatedElement := NewAnimatedElementWithState(state.AnimatedElementState{}, worldMap, mathHelper, quit)
+	animatedElement := NewAnimatedElementWithState(&state.AnimatedElementState{}, worldMap, mathHelper, quit)
 	animatedElement.SetState(newState)
 	assert.Equal(t, newState, animatedElement.GetState())
 }

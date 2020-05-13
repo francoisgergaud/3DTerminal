@@ -7,6 +7,7 @@ import (
 )
 
 //AnimatedElementState provides a base implmentation for AnimatedElement.
+//TODO: create interface and mocks for tests
 type AnimatedElementState struct {
 	Position        *math.Point2D
 	Angle           float64
@@ -20,8 +21,12 @@ type AnimatedElementState struct {
 
 //Clone creates a copy.
 func (a *AnimatedElementState) Clone() AnimatedElementState {
+	var position *math.Point2D
+	if a.Position != nil {
+		position = a.Position.Clone()
+	}
 	return AnimatedElementState{
-		Position:        a.Position.Clone(),
+		Position:        position,
 		Angle:           a.Angle,
 		StepAngle:       a.StepAngle,
 		Size:            a.Size,

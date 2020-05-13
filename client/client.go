@@ -3,8 +3,7 @@ package client
 import (
 	"francoisgergaud/3dGame/client/connector"
 	"francoisgergaud/3dGame/client/player"
-	"francoisgergaud/3dGame/common/environment/animatedelement/state"
-	"francoisgergaud/3dGame/common/environment/world"
+	"francoisgergaud/3dGame/common/environment/animatedelement"
 	"francoisgergaud/3dGame/common/event"
 )
 
@@ -50,10 +49,9 @@ type Configuration struct {
 
 //Engine represents an game engine which takes input and render on screen.
 type Engine interface {
-	GetPlayer() player.Player
-	StartEngine()
-	Initialize(playerID string, playerState state.AnimatedElementState, worldMap world.WorldMap, otherPlayers map[string]state.AnimatedElementState, serverTimeFramce uint32)
+	Player() player.Player
+	OtherPlayers() map[string]animatedelement.AnimatedElement
 	ReceiveEventsFromServer(events []event.Event)
-	GetShutdown() <-chan interface{}
-	SetConnectionToServer(connectionToServer connector.ServerConnector)
+	Shutdown() <-chan interface{}
+	ConnectToServer(connectionToServer connector.ServerConnector)
 }

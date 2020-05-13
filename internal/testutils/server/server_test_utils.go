@@ -13,8 +13,9 @@ type MockServer struct {
 }
 
 //RegisterPlayer mocks the method of the same name
-func (mock *MockServer) RegisterPlayer(clientConnection connector.ClientConnection) {
-	mock.Called(clientConnection)
+func (mock *MockServer) RegisterPlayer(clientConnection connector.ClientConnection) string {
+	args := mock.Called(clientConnection)
+	return args.String(0)
 }
 
 //UnregisterClient mocks the method of the same name

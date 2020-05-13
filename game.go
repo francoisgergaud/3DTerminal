@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"francoisgergaud/3dGame/client"
 	localServerConnector "francoisgergaud/3dGame/client/connector/local/impl"
+	clienWwebsocketconnector "francoisgergaud/3dGame/client/connector/websocket"
 	clientwebsocketconnector "francoisgergaud/3dGame/client/connector/websocket"
 	"francoisgergaud/3dGame/client/consolemanager"
 	consoleManagerImpl "francoisgergaud/3dGame/client/consolemanager/impl"
 	clientImpl "francoisgergaud/3dGame/client/impl"
 	"francoisgergaud/3dGame/server"
+	websocketconnector "francoisgergaud/3dGame/server/connector/websocket"
 	serverImpl "francoisgergaud/3dGame/server/impl"
 	webserver "francoisgergaud/3dGame/server/net"
 	"time"
+
+	gorillaWebsocket "github.com/gorilla/websocket"
 
 	"github.com/gdamore/tcell"
 )
@@ -50,23 +54,43 @@ func InitGame(screen tcell.Screen) error {
 			return fmt.Errorf("Error while initializing engine: %w", err)
 		}
 		serverURL := "localhost:" + *serverPort
-		webServer := webserver.NewWebServer(server, serverURL)
+
+		websocketUpgrader := websocketconnector.NewWebsocketUpgraderWwrapper(&gorillaWebsocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+		})
+
+		webServer := webserver.NewWebServer(server, serverURL, websocketUpgrader)
 		go webServer.Start()
 		time.Sleep(time.Millisecond)
-		clientwebsocketconnector.NewWebSocketServerConnection(engine, "ws://"+serverURL+"/join", quit)
+		dialer := clienWwebsocketconnector.NewWebsocketDialerWrapper()
+		webserverConnection, err := clientwebsocketconnector.NewWebSocketServerConnection(engine, "ws://"+serverURL+"/join", dialer)
+		if err != nil {
+			return fmt.Errorf("Error while initializing connection to server: %w", err)
+		}
+		webserverConnection.Start()
 	} else if *mode == "remoteClient" {
 		engine, err = createClient(screen, quit, worldUpdateRate, consoleEventManager)
 		if err != nil {
 			return fmt.Errorf("Error while initializing engine: %w", err)
 		}
-		clientwebsocketconnector.NewWebSocketServerConnection(engine, "ws://"+*remoteAddress+"/join", quit)
+		dialer := clienWwebsocketconnector.NewWebsocketDialerWrapper()
+		webserverConnection, err := clientwebsocketconnector.NewWebSocketServerConnection(engine, "ws://"+*remoteAddress+"/join", dialer)
+		if err != nil {
+			return fmt.Errorf("Error while initializing connection to server: %w", err)
+		}
+		webserverConnection.Start()
 	} else if *mode == "remoteServer" {
 		server, err = serverImpl.NewServer(worldUpdateRate, quit)
 		if err != nil {
 			return fmt.Errorf("error while instantiating the server: %w", err)
 		}
 		serverURL := "localhost:" + *serverPort
-		webServer := webserver.NewWebServer(server, serverURL)
+		websocketUpgrader := websocketconnector.NewWebsocketUpgraderWwrapper(&gorillaWebsocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+		})
+		webServer := webserver.NewWebServer(server, serverURL, websocketUpgrader)
 		go webServer.Start()
 	}
 
@@ -75,7 +99,7 @@ func InitGame(screen tcell.Screen) error {
 	<-quit
 	//wait for engine graceful shutdown
 	if engine != nil {
-		<-engine.GetShutdown()
+		<-engine.Shutdown()
 	}
 	return nil
 }

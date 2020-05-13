@@ -2,14 +2,13 @@ package websocketconnector
 
 import (
 	"fmt"
+	websocket "francoisgergaud/3dGame/common/connector"
 	"francoisgergaud/3dGame/common/event"
 	"francoisgergaud/3dGame/server"
-
-	"github.com/gorilla/websocket"
 )
 
 //RegisterWebSocketClientConnectionToServer creates a new websocket client connection and register it to the server
-func RegisterWebSocketClientConnectionToServer(wsConnection *websocket.Conn, server server.Server) {
+func RegisterWebSocketClientConnectionToServer(wsConnection websocket.WebsocketConnection, server server.Server) {
 	websocketClientConnection := &WebSocketClientConnection{
 		server:       server,
 		wsConnection: wsConnection,
@@ -25,7 +24,7 @@ func RegisterWebSocketClientConnectionToServer(wsConnection *websocket.Conn, ser
 type WebSocketClientConnection struct {
 	server server.Server
 	// The websocket connection.
-	wsConnection *websocket.Conn
+	wsConnection websocket.WebsocketConnection
 	send         chan event.Event
 	playerID     string
 }

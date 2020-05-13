@@ -25,7 +25,7 @@ func TestActionKeyUp(t *testing.T) {
 		MoveDirection:   state.None,
 		RotateDirection: state.None,
 	}
-	player := NewPlayer(state, worldMap, mathHelper, nil)
+	player := NewPlayer(&state, worldMap, mathHelper, nil)
 	worldMap.On("GetCellValue", 2, 3).Return(0)
 	player.Action(tcell.NewEventKey(tcell.KeyUp, 0, 0))
 	player.Move()
@@ -45,7 +45,7 @@ func TestActionKeyUpWhenMovingBackward(t *testing.T) {
 		MoveDirection:   state.Backward,
 		RotateDirection: state.None,
 	}
-	player := NewPlayer(state, worldMap, mathHelper, nil)
+	player := NewPlayer(&state, worldMap, mathHelper, nil)
 	worldMap.On("GetCellValue", 2, 3).Return(0)
 	player.Action(tcell.NewEventKey(tcell.KeyUp, 0, 0))
 	player.Move()
@@ -65,7 +65,7 @@ func TestActionKeyDown(t *testing.T) {
 		MoveDirection:   state.None,
 		RotateDirection: state.None,
 	}
-	player := NewPlayer(state, worldMap, mathHelper, nil)
+	player := NewPlayer(&state, worldMap, mathHelper, nil)
 	worldMap.On("GetCellValue", 0, 3).Return(0)
 	player.Action(tcell.NewEventKey(tcell.KeyDown, 0, 0))
 	player.Move()
@@ -85,7 +85,7 @@ func TestActionKeyDownWhenMovingForward(t *testing.T) {
 		MoveDirection:   state.Forward,
 		RotateDirection: state.None,
 	}
-	player := NewPlayer(state, worldMap, mathHelper, nil)
+	player := NewPlayer(&state, worldMap, mathHelper, nil)
 	worldMap.On("GetCellValue", 0, 3).Return(0)
 	player.Action(tcell.NewEventKey(tcell.KeyDown, 0, 0))
 	player.Move()
@@ -105,7 +105,7 @@ func TestActionKeyLeft(t *testing.T) {
 		MoveDirection:   state.None,
 		RotateDirection: state.None,
 	}
-	player := NewPlayer(state, worldMap, mathHelper, nil)
+	player := NewPlayer(&state, worldMap, mathHelper, nil)
 	worldMap.On("GetCellValue", 0, 3).Return(0)
 	player.Action(tcell.NewEventKey(tcell.KeyLeft, 0, 0))
 	player.Move()
@@ -125,7 +125,7 @@ func TestActionKeyLeftWhenRotatingRight(t *testing.T) {
 		MoveDirection:   state.None,
 		RotateDirection: state.Right,
 	}
-	player := NewPlayer(state, worldMap, mathHelper, nil)
+	player := NewPlayer(&state, worldMap, mathHelper, nil)
 	player.Action(tcell.NewEventKey(tcell.KeyLeft, 0, 0))
 	player.Move()
 	assert.Equal(t, 0.0, player.GetState().Angle)
@@ -144,7 +144,7 @@ func TestActionKeyRight(t *testing.T) {
 		MoveDirection:   state.None,
 		RotateDirection: state.None,
 	}
-	player := NewPlayer(state, worldMap, mathHelper, nil)
+	player := NewPlayer(&state, worldMap, mathHelper, nil)
 	worldMap.On("GetCellValue", 0, 3).Return(0)
 	player.Action(tcell.NewEventKey(tcell.KeyRight, 0, 0))
 	player.Move()
@@ -164,7 +164,7 @@ func TestActionKeyRightWhenRotatingLeft(t *testing.T) {
 		MoveDirection:   state.None,
 		RotateDirection: state.Left,
 	}
-	player := NewPlayer(state, worldMap, mathHelper, nil)
+	player := NewPlayer(&state, worldMap, mathHelper, nil)
 	player.Action(tcell.NewEventKey(tcell.KeyRight, 0, 0))
 	player.Move()
 	assert.Equal(t, 0.0, player.GetState().Angle)
@@ -191,7 +191,7 @@ func TestNewPlayableCharacter(t *testing.T) {
 		MoveDirection:   moveDirection,
 		RotateDirection: rotateDirection,
 	}
-	player := NewPlayer(playerState, worldMap, mathHelper, nil)
+	player := NewPlayer(&playerState, worldMap, mathHelper, nil)
 	assert.Equal(t, position, player.GetState().Position)
 	assert.Equal(t, angle, player.GetState().Angle)
 	assert.Equal(t, stepAngle, player.GetState().StepAngle)
@@ -217,7 +217,7 @@ func TestPlayerStart(t *testing.T) {
 		RotateDirection: state.Left,
 	}
 	quit := make(chan struct{})
-	player := NewPlayer(state, worldMap, mathHelper, quit)
+	player := NewPlayer(&state, worldMap, mathHelper, quit)
 	go func() {
 		<-time.After(time.Millisecond * time.Duration(1000))
 		close(quit)

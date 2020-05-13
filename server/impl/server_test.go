@@ -54,7 +54,6 @@ func TestRegisterPlayer(t *testing.T) {
 	var eventCapture []event.Event
 	clientConnection.On(
 		"SendEventsToClient",
-		server.timeFrame,
 		mock.MatchedBy(
 			func(events []event.Event) bool {
 				eventCapture = events
@@ -180,7 +179,7 @@ func TestSendEventsToClients(t *testing.T) {
 	events := make([]event.Event, 1)
 	events[0] = eventFromPlayer
 	var eventCapture []event.Event
-	clientConnection.On("SendEventsToClient", timeFrame, mock.MatchedBy(
+	clientConnection.On("SendEventsToClient", mock.MatchedBy(
 		func(events []event.Event) bool {
 			eventCapture = events
 			return true
