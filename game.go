@@ -61,7 +61,7 @@ func InitGame(screen tcell.Screen) error {
 		})
 
 		webServer := webserver.NewWebServer(server, serverURL, websocketUpgrader)
-		go webServer.Start()
+		go webServer.Run()
 		time.Sleep(time.Millisecond)
 		dialer := clienWwebsocketconnector.NewWebsocketDialerWrapper()
 		webserverConnection, err := clientwebsocketconnector.NewWebSocketServerConnection(engine, "ws://"+serverURL+"/join", dialer)
@@ -91,7 +91,7 @@ func InitGame(screen tcell.Screen) error {
 			WriteBufferSize: 1024,
 		})
 		webServer := webserver.NewWebServer(server, serverURL, websocketUpgrader)
-		go webServer.Start()
+		go webServer.Run()
 	}
 
 	//starts the game

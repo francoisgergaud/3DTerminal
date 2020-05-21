@@ -7,55 +7,78 @@ import (
 	"francoisgergaud/3dGame/server"
 )
 
-//RegisterWebSocketClientConnectionToServer creates a new websocket client connection and register it to the server
-func RegisterWebSocketClientConnectionToServer(wsConnection websocket.WebsocketConnection, server server.Server) {
-	websocketClientConnection := &WebSocketClientConnection{
-		server:       server,
-		wsConnection: wsConnection,
-		send:         make(chan event.Event),
+//NewWebSocketClientConnection is a factory for WebSocketClientConnection
+func NewWebSocketClientConnection(eventToSendToCLient chan event.Event) *WebSocketClientConnection {
+	return &WebSocketClientConnection{
+		eventToSendToCLient: eventToSendToCLient,
 	}
-
-	go websocketClientConnection.writeToWebSocket()
-	websocketClientConnection.playerID = server.RegisterPlayer(websocketClientConnection)
-	go websocketClientConnection.readFromWebSocket()
 }
 
 //WebSocketClientConnection is a client-connection accessible through websocket
 type WebSocketClientConnection struct {
-	server server.Server
-	// The websocket connection.
-	wsConnection websocket.WebsocketConnection
-	send         chan event.Event
-	playerID     string
+	eventToSendToCLient chan event.Event
 }
 
 //SendEventsToClient sends events to a client
 func (clientConnection *WebSocketClientConnection) SendEventsToClient(events []event.Event) {
 	for _, event := range events {
-		clientConnection.send <- event
+		clientConnection.eventToSendToCLient <- event
 	}
 }
 
-func (clientConnection *WebSocketClientConnection) readFromWebSocket() {
+//NewClientWebSocketListener is a factory for ClientWebSocketListener
+func NewClientWebSocketListener(playerID string, wsConnection websocket.WebsocketConnection, server server.Server) *ClientWebSocketListener {
+	return &ClientWebSocketListener{
+		playerID:     playerID,
+		wsConnection: wsConnection,
+		server:       server,
+	}
+}
+
+//ClientWebSocketListener is a runnable which listen from incoming websocket messages from a client
+type ClientWebSocketListener struct {
+	wsConnection websocket.WebsocketConnection
+	server       server.Server
+	playerID     string
+}
+
+//Run is a blocking loop to listen on incoming websocket events from a client
+func (clientWebSocketListener *ClientWebSocketListener) Run() {
 	eventsFromClient := make([]event.Event, 0)
 	for {
-		if err := clientConnection.wsConnection.ReadJSON(&eventsFromClient); err != nil {
+		if err := clientWebSocketListener.wsConnection.ReadJSON(&eventsFromClient); err != nil {
 			fmt.Println(err)
+			return
 		}
 		for _, event := range eventsFromClient {
-			event.PlayerID = clientConnection.playerID
-			clientConnection.server.ReceiveEventFromClient(event)
+			event.PlayerID = clientWebSocketListener.playerID
+			clientWebSocketListener.server.ReceiveEventFromClient(event)
 		}
 	}
 }
 
-func (clientConnection *WebSocketClientConnection) writeToWebSocket() {
+//NewClientWebSocketSender is a factory for ClientWebSocketSender
+func NewClientWebSocketSender(wsConnection websocket.WebsocketConnection, eventToSendToClient chan event.Event) *ClientWebSocketSender {
+	return &ClientWebSocketSender{
+		wsConnection:        wsConnection,
+		eventToSendToClient: eventToSendToClient,
+	}
+}
+
+//ClientWebSocketSender is a runnable which send events from the server to the client using the websocket-connection opened by the client
+type ClientWebSocketSender struct {
+	wsConnection        websocket.WebsocketConnection
+	eventToSendToClient chan event.Event
+}
+
+//Run is a blocking loop waiting for events from server and to be sent to the client
+func (clientWebSocketSender *ClientWebSocketSender) Run() {
 	for {
-		//eventsToClient := make([]event.Event, 1)
 		select {
-		case /*eventsToClient[0] =*/ eventToClient := <-clientConnection.send:
-			if err := clientConnection.wsConnection.WriteJSON([]event.Event{eventToClient}); err != nil {
+		case eventToClient := <-clientWebSocketSender.eventToSendToClient:
+			if err := clientWebSocketSender.wsConnection.WriteJSON([]event.Event{eventToClient}); err != nil {
 				fmt.Println(err)
+				return
 			}
 		}
 	}
