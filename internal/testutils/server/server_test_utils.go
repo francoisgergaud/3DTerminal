@@ -27,3 +27,8 @@ func (mock *MockServer) UnregisterClient(playerID string) {
 func (mock *MockServer) ReceiveEventFromClient(event event.Event) {
 	mock.Called(event)
 }
+
+//Start mocks the method of the same name
+func (mock *MockServer) Start() {
+	mock.Called()
+}

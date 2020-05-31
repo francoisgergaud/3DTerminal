@@ -5,6 +5,7 @@ import (
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
+	"francoisgergaud/3dGame/common/event/publisher"
 	"francoisgergaud/3dGame/common/math"
 	"francoisgergaud/3dGame/common/math/helper"
 	"time"
@@ -102,6 +103,6 @@ func (mock *MockPlayer) PublishEvent(event event.Event) {
 }
 
 //RegisterListener mocks the method of the same name
-func (mock *MockPlayer) RegisterListener(eventChanel chan<- event.Event) {
-	mock.Called(eventChanel)
+func (mock *MockPlayer) RegisterListener(listener publisher.EventListener) {
+	mock.Called(listener)
 }

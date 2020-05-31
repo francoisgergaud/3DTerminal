@@ -136,7 +136,7 @@ func TestWorldUpdaterRun(t *testing.T) {
 		quit:       quitChannel,
 	}
 	go worldElementUpdater.Run()
-	<-time.After(time.Millisecond * 2)
+	<-time.After(time.Millisecond * 5)
 	close(quitChannel)
 	mock.AssertExpectationsForObjects(t, player, worldElement, engine)
 }
@@ -225,8 +225,9 @@ func TestReceiveInitializationEvents(t *testing.T) {
 	playerFactory := testPlayer.MockPlayerFactory{}
 	mathHelper := new(testhelper.MockMathHelper)
 	quit := make(chan struct{})
+	playerListener := &playerListenerImpl{}
 	player := new(testPlayer.MockPlayer)
-	player.On("RegisterListener", mock.AnythingOfType("chan<- event.Event"))
+	player.On("RegisterListener", playerListener)
 	playerFactory.On("NewPlayer", &playerState, worldMapCloned, mathHelper, quit).Return(player)
 	consoleEventManager := new(testConsoleManager.MockConsoleEventManager)
 	consoleEventManager.On("SetPlayer", player)
@@ -235,7 +236,6 @@ func TestReceiveInitializationEvents(t *testing.T) {
 	animatedElementFactory.On("NewAnimatedElementWithState", &otherPlayerState, worldMapCloned, mathHelper, quit).Return(otherPlayerAnimatedElement)
 	runner := new(testrunner.MockRunner)
 	worldElementUpdater := &worldElementUpdaterImpl{}
-	playerListener := &playerListenerImpl{}
 	engine := &Impl{
 		initialized:                           false,
 		mathHelper:                            mathHelper,

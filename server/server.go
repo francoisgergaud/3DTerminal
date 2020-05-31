@@ -12,6 +12,7 @@ import (
 // - communicate environment changes to players
 type Server interface {
 	RegisterPlayer(clientConnection connector.ClientConnection) string
+	Start()
 	UnregisterClient(playerID string)
 	ReceiveEventFromClient(event.Event)
 }

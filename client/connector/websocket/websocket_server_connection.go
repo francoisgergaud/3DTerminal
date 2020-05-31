@@ -45,7 +45,7 @@ func (connection *WebSocketServerConnection) Disconnect() {
 
 //Start to listen events from server
 func (connection *WebSocketServerConnection) Start() {
-	go connection.listenToServer()
+	connection.listenToServer()
 }
 
 func (connection *WebSocketServerConnection) listenToServer() error {

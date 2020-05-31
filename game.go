@@ -38,6 +38,7 @@ func InitGame(screen tcell.Screen) error {
 		if err != nil {
 			return fmt.Errorf("error while instantiating the server: %w", err)
 		}
+		server.Start()
 		engine, err = createClient(screen, quit, worldUpdateRate, consoleEventManager)
 		if err != nil {
 			return fmt.Errorf("Error while initializing engine: %w", err)
@@ -49,6 +50,7 @@ func InitGame(screen tcell.Screen) error {
 		if err != nil {
 			return fmt.Errorf("error while instantiating the server: %w", err)
 		}
+		server.Start()
 		engine, err = createClient(screen, quit, worldUpdateRate, consoleEventManager)
 		if err != nil {
 			return fmt.Errorf("Error while initializing engine: %w", err)
@@ -68,7 +70,7 @@ func InitGame(screen tcell.Screen) error {
 		if err != nil {
 			return fmt.Errorf("Error while initializing connection to server: %w", err)
 		}
-		webserverConnection.Start()
+		go webserverConnection.Start()
 	} else if *mode == "remoteClient" {
 		engine, err = createClient(screen, quit, worldUpdateRate, consoleEventManager)
 		if err != nil {
@@ -79,12 +81,13 @@ func InitGame(screen tcell.Screen) error {
 		if err != nil {
 			return fmt.Errorf("Error while initializing connection to server: %w", err)
 		}
-		webserverConnection.Start()
+		go webserverConnection.Start()
 	} else if *mode == "remoteServer" {
 		server, err = serverImpl.NewServer(worldUpdateRate, quit)
 		if err != nil {
 			return fmt.Errorf("error while instantiating the server: %w", err)
 		}
+		server.Start()
 		serverURL := "localhost:" + *serverPort
 		websocketUpgrader := websocketconnector.NewWebsocketUpgraderWwrapper(&gorillaWebsocket.Upgrader{
 			ReadBufferSize:  1024,

@@ -163,7 +163,7 @@ func (engine *Impl) processPreInitializationEvents(events []event.Event) {
 		engine.Runner.Start(engine)
 		engine.Runner.Start(engine.worldElementUpdater)
 		//propagate events from player
-		engine.Player().RegisterListener(engine.playerListener.playerEventQueue)
+		engine.Player().RegisterListener(engine.playerListener)
 		//process all previous events
 		numberOfPreInitializationEvents := len(engine.preInitializationEventFromServerQueue)
 		if numberOfPreInitializationEvents > 0 {
@@ -239,6 +239,10 @@ func (playerListener *playerListenerImpl) Run() {
 			return
 		}
 	}
+}
+
+func (playerListener *playerListenerImpl) ReceiveEvent(event event.Event) {
+	playerListener.playerEventQueue <- event
 }
 
 //worldElementUpdaterImpl results from an internal decompostion of the client to manage the client-side worl-update

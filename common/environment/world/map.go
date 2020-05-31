@@ -28,7 +28,7 @@ func (w *WorldMapImpl) InitializeRandom(width, height int) {
 }
 
 //NewWorldMap builds a new world-map from the input parameters.
-func NewWorldMap(grid [][]int) WorldMap {
+func NewWorldMap(grid [][]int) *WorldMapImpl {
 	return &WorldMapImpl{
 		Grid: grid,
 	}

@@ -6,6 +6,7 @@ import (
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
+	publisher "francoisgergaud/3dGame/common/event/publisher"
 	publisherImpl "francoisgergaud/3dGame/common/event/publisher/impl"
 	internalMath "francoisgergaud/3dGame/common/math"
 	mathHelper "francoisgergaud/3dGame/common/math/helper"
@@ -15,11 +16,17 @@ import (
 	"github.com/gdamore/tcell"
 )
 
+type Bot interface {
+	publisher.EventPublisher
+	animatedelement.AnimatedElement
+}
+
 //NewBotImpl build a new bot implementation.
 func NewBotImpl(id string, initialPosition *internalMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper mathHelper.MathHelper, quit chan struct{}) bot.Bot {
 	result := BotImpl{
 		id:              id,
 		AnimatedElement: animatedelementImpl.NewAnimatedElement(initialPosition, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, world, mathHelper, quit),
+		EventPublisher:  publisherImpl.NewEventPublisherImpl(),
 		mathHelper:      mathHelper,
 		world:           world,
 	}
@@ -30,7 +37,7 @@ func NewBotImpl(id string, initialPosition *internalMath.Point2D, initialAngle, 
 type BotImpl struct {
 	id string
 	animatedelement.AnimatedElement
-	publisherImpl.EventPublisherImpl
+	publisher.EventPublisher
 	world      world.WorldMap
 	mathHelper mathHelper.MathHelper
 }
