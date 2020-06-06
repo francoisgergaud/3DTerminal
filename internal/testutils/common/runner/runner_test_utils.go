@@ -15,3 +15,13 @@ type MockRunner struct {
 func (runner *MockRunner) Start(runnable runner.Runnable) {
 	runner.Called(runnable)
 }
+
+//MockRunnable mocks the runnableinterface
+type MockRunnable struct {
+	mock.Mock
+}
+
+//Run mocks the method of the same name
+func (runnable *MockRunnable) Run() {
+	runnable.Called()
+}

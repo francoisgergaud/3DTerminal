@@ -4,19 +4,24 @@ import (
 	"fmt"
 	websocket "francoisgergaud/3dGame/common/connector"
 	"francoisgergaud/3dGame/common/event"
+	"francoisgergaud/3dGame/common/runner"
 	"francoisgergaud/3dGame/server"
 )
 
 //NewWebSocketClientConnection is a factory for WebSocketClientConnection
-func NewWebSocketClientConnection(eventToSendToCLient chan event.Event) *WebSocketClientConnection {
+func NewWebSocketClientConnection(eventToSendToCLient chan event.Event, clientWebsocketSender ClientWebSocketSender, wsConnection websocket.WebsocketConnection) *WebSocketClientConnection {
 	return &WebSocketClientConnection{
-		eventToSendToCLient: eventToSendToCLient,
+		eventToSendToCLient:   eventToSendToCLient,
+		clientWebsocketSender: clientWebsocketSender,
+		wsConnection:          wsConnection,
 	}
 }
 
 //WebSocketClientConnection is a client-connection accessible through websocket
 type WebSocketClientConnection struct {
-	eventToSendToCLient chan event.Event
+	eventToSendToCLient   chan event.Event
+	clientWebsocketSender ClientWebSocketSender
+	wsConnection          websocket.WebsocketConnection
 }
 
 //SendEventsToClient sends events to a client
@@ -24,6 +29,13 @@ func (clientConnection *WebSocketClientConnection) SendEventsToClient(events []e
 	for _, event := range events {
 		clientConnection.eventToSendToCLient <- event
 	}
+}
+
+//Close closes the connection. It stops the client-websocket-sender.
+func (clientConnection *WebSocketClientConnection) Close() {
+	clientConnection.clientWebsocketSender.Stop()
+	//closing the websocket connection will stop both client-listener and client-sender
+	clientConnection.wsConnection.Close()
 }
 
 //NewClientWebSocketListener is a factory for ClientWebSocketListener
@@ -47,6 +59,7 @@ func (clientWebSocketListener *ClientWebSocketListener) Run() {
 	eventsFromClient := make([]event.Event, 0)
 	for {
 		if err := clientWebSocketListener.wsConnection.ReadJSON(&eventsFromClient); err != nil {
+			clientWebSocketListener.server.UnregisterClient(clientWebSocketListener.playerID)
 			fmt.Println(err)
 			return
 		}
@@ -58,23 +71,33 @@ func (clientWebSocketListener *ClientWebSocketListener) Run() {
 }
 
 //NewClientWebSocketSender is a factory for ClientWebSocketSender
-func NewClientWebSocketSender(wsConnection websocket.WebsocketConnection, eventToSendToClient chan event.Event) *ClientWebSocketSender {
-	return &ClientWebSocketSender{
+func NewClientWebSocketSender(wsConnection websocket.WebsocketConnection, eventToSendToClient chan event.Event) *ClientWebSocketSenderImpl {
+	return &ClientWebSocketSenderImpl{
 		wsConnection:        wsConnection,
 		eventToSendToClient: eventToSendToClient,
+		quit:                make(chan interface{}),
 	}
 }
 
 //ClientWebSocketSender is a runnable which send events from the server to the client using the websocket-connection opened by the client
-type ClientWebSocketSender struct {
+type ClientWebSocketSender interface {
+	runner.Runnable
+	Stop()
+}
+
+//ClientWebSocketSenderImpl is a default implementation of the ClientWebSocketSender
+type ClientWebSocketSenderImpl struct {
 	wsConnection        websocket.WebsocketConnection
 	eventToSendToClient chan event.Event
+	quit                chan interface{}
 }
 
 //Run is a blocking loop waiting for events from server and to be sent to the client
-func (clientWebSocketSender *ClientWebSocketSender) Run() {
+func (clientWebSocketSender *ClientWebSocketSenderImpl) Run() {
 	for {
 		select {
+		case <-clientWebSocketSender.quit:
+			return
 		case eventToClient := <-clientWebSocketSender.eventToSendToClient:
 			if err := clientWebSocketSender.wsConnection.WriteJSON([]event.Event{eventToClient}); err != nil {
 				fmt.Println(err)
@@ -82,4 +105,9 @@ func (clientWebSocketSender *ClientWebSocketSender) Run() {
 			}
 		}
 	}
+}
+
+//Stop stops the client-event-sender
+func (clientWebSocketSender *ClientWebSocketSenderImpl) Stop() {
+	close(clientWebSocketSender.quit)
 }

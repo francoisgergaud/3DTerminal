@@ -7,13 +7,12 @@ import (
 	innerMath "francoisgergaud/3dGame/common/math"
 	"francoisgergaud/3dGame/common/math/helper"
 	"math"
-	"time"
 
 	"github.com/gdamore/tcell"
 )
 
 //NewAnimatedElement builds a new pointer to AnimatedElementImpl.
-func NewAnimatedElement(initialPosition *innerMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement {
+func NewAnimatedElement(initialPosition *innerMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper helper.MathHelper) animatedelement.AnimatedElement {
 	state := state.AnimatedElementState{
 		Position:        initialPosition,
 		Angle:           initialAngle,
@@ -24,57 +23,34 @@ func NewAnimatedElement(initialPosition *innerMath.Point2D, initialAngle, veloci
 		MoveDirection:   moveDirection,
 		RotateDirection: rotateDirection,
 	}
-	return NewAnimatedElementWithState(&state, world, mathHelper, quit)
+	return NewAnimatedElementWithState(&state, world, mathHelper)
 }
 
 //NewAnimatedElementWithState builds a new pointer to AnimatedElementImpl.
-func NewAnimatedElementWithState(animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement {
+func NewAnimatedElementWithState(animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper) animatedelement.AnimatedElement {
 	return &AnimatedElementImpl{
-		state:         animatedElementState,
-		world:         world,
-		updateChannel: make(chan time.Time),
-		quitChannel:   quit,
-		mathHelper:    mathHelper,
+		state:      animatedElementState,
+		world:      world,
+		mathHelper: mathHelper,
 	}
 }
 
 //AnimatedElementImpl is the implmenetation of AnimatedElement
 type AnimatedElementImpl struct {
-	state         *state.AnimatedElementState
-	updateChannel chan time.Time
-	quitChannel   chan struct{}
-	world         world.WorldMap
-	mathHelper    helper.MathHelper
-	id            string
+	state      *state.AnimatedElementState
+	world      world.WorldMap
+	mathHelper helper.MathHelper
+	id         string
 }
 
-//GetUpdateChannel returns the channel used to listen to 'update' event.
-func (animatedElement *AnimatedElementImpl) GetUpdateChannel() chan time.Time {
-	return animatedElement.updateChannel
-}
-
-//GetState returns the animated-element's state.
-func (animatedElement *AnimatedElementImpl) GetState() *state.AnimatedElementState {
+//State returns the animated-element's state.
+func (animatedElement *AnimatedElementImpl) State() *state.AnimatedElementState {
 	return animatedElement.state
 }
 
 //SetState update the animated-element's state.
 func (animatedElement *AnimatedElementImpl) SetState(state *state.AnimatedElementState) {
 	animatedElement.state = state
-}
-
-//Start triggers the animation of the animated-element.
-func (animatedElement *AnimatedElementImpl) Start() {
-	go func() {
-		for {
-			select {
-			case <-animatedElement.updateChannel:
-				animatedElement.Move()
-			case <-animatedElement.quitChannel:
-				return
-			}
-		}
-	}()
 }
 
 //Move updates the player's position depending on its moving and rotate Direction and the cell's value on the world-map

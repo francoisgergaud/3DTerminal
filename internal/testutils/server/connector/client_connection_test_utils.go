@@ -20,3 +20,8 @@ func (mock *MockClientConnection) ReceiveEventsFromClient(events []event.Event) 
 func (mock *MockClientConnection) SendEventsToClient(events []event.Event) {
 	mock.Called(events)
 }
+
+//Close mocks the method of the same name
+func (mock *MockClientConnection) Close() {
+	mock.Called()
+}

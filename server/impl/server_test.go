@@ -57,18 +57,22 @@ func (mock *mockClientEventSender) Run() {
 	mock.Called()
 }
 
-func (mock *mockClientEventSender) AddClient(playerID string, connectionToClient connector.ClientConnection) {
+func (mock *mockClientEventSender) addClient(playerID string, connectionToClient connector.ClientConnection) {
 	mock.Called(playerID, connectionToClient)
 }
-func (mock *mockClientEventSender) RemoveClient(playerID string) {
+func (mock *mockClientEventSender) removeClient(playerID string) {
 	mock.Called(playerID)
 }
 
-func (mock *mockClientEventSender) SendEventToClient(playerID string, eventToSend event.Event) {
+func (mock *mockClientEventSender) sendEventToClient(playerID string, eventToSend event.Event) {
 	mock.Called(playerID, eventToSend)
 }
 func (mock *mockClientEventSender) ReceiveEvent(event event.Event) {
 	mock.Called(event)
+}
+
+func (mock *mockClientEventSender) close() {
+	mock.Called()
 }
 
 func TestNewServer(t *testing.T) {
@@ -135,15 +139,14 @@ func TestRegisterPlayer(t *testing.T) {
 	animatedElement := new(testanimatedelement.MockAnimatedElement)
 	mockFactories.On("NewPlayer", worldMap, mathHelper, quit).Return(animatedElement)
 	animatedElementState := &state.AnimatedElementState{}
-	animatedElement.On("GetState").Return(animatedElementState)
-	animatedElement.On("Start")
+	animatedElement.On("State").Return(animatedElementState)
 
 	otherPlayerID := "otherPlayer1"
 	otherPlayer := new(testanimatedelement.MockAnimatedElement)
 	otherPlayerState := &state.AnimatedElementState{
 		Velocity: 0.0025,
 	}
-	otherPlayer.On("GetState").Return(otherPlayerState)
+	otherPlayer.On("State").Return(otherPlayerState)
 	serverPlayers[otherPlayerID] = otherPlayer
 
 	bots = make(map[string]bot.Bot)
@@ -152,7 +155,7 @@ func TestRegisterPlayer(t *testing.T) {
 	botState := &state.AnimatedElementState{
 		StepAngle: 0.0025,
 	}
-	bot.MockAnimatedElement.On("GetState").Return(botState)
+	bot.MockAnimatedElement.On("State").Return(botState)
 	bots[botID] = bot
 
 	server := Impl{
@@ -166,7 +169,7 @@ func TestRegisterPlayer(t *testing.T) {
 		mathHelper:        mathHelper,
 	}
 	clientConnection := new(testconnector.MockClientConnection)
-	clientEventSender.On("AddClient", uuid.String(), clientConnection)
+	clientEventSender.On("addClient", uuid.String(), clientConnection)
 	worldMap.On("Clone").Return(worldMap)
 	var eventForOtherPlayerCapture, eventForPlayerCapture event.Event
 	clientEventSender.On(
@@ -179,7 +182,7 @@ func TestRegisterPlayer(t *testing.T) {
 		),
 	)
 	clientEventSender.On(
-		"SendEventToClient",
+		"sendEventToClient",
 		uuid.String(),
 		mock.MatchedBy(
 			func(event event.Event) bool {
@@ -217,7 +220,7 @@ func TestUnregisterClient(t *testing.T) {
 		clientEventSender: clientEventSender,
 		players:           palyers,
 	}
-	clientEventSender.On("RemoveClient", playerID)
+	clientEventSender.On("removeClient", playerID)
 	var eventCapture event.Event
 	clientEventSender.On(
 		"ReceiveEvent",
@@ -341,7 +344,7 @@ func TestClientEventSenderAddClient(t *testing.T) {
 	clientEventSender := &clientEventSenderImp{
 		clientConnections: clientConnections,
 	}
-	clientEventSender.AddClient(playerID, clientConnection)
+	clientEventSender.addClient(playerID, clientConnection)
 	assert.Same(t, clientConnection, clientEventSender.clientConnections[playerID])
 }
 
@@ -353,8 +356,10 @@ func TestClientEventSenderRemoveClient(t *testing.T) {
 	clientEventSender := &clientEventSenderImp{
 		clientConnections: clientConnections,
 	}
-	clientEventSender.RemoveClient(playerID)
+	clientConnection.On("Close")
+	clientEventSender.removeClient(playerID)
 	assert.Nil(t, clientConnections[playerID])
+	mock.AssertExpectationsForObjects(t, clientConnection)
 }
 
 func TestClientEventSenderSendEventToClient(t *testing.T) {
@@ -381,7 +386,7 @@ func TestClientEventSenderSendEventToClient(t *testing.T) {
 		Action:    "actionTest",
 		TimeFrame: 0,
 	}
-	clientEventSender.SendEventToClient(playerID, eventToSend)
+	clientEventSender.sendEventToClient(playerID, eventToSend)
 	assert.Equal(t, 1, len(eventsToCapture))
 	//verify the timeframe is updated before sending the event
 	eventToSend.TimeFrame = clientEventSenderInitalTimeFrame
@@ -400,4 +405,17 @@ func TestClientEventSenderReceiveEvent(t *testing.T) {
 	clientEventSender.ReceiveEvent(eventToSend)
 	eventReceived := <-eventQueue
 	assert.Equal(t, eventToSend, eventReceived)
+}
+
+func TestClientEventSenderClose(t *testing.T) {
+	clientConnection := new(testconnector.MockClientConnection)
+	clientConnections := make(map[string]connector.ClientConnection)
+	playerID := "playerID"
+	clientConnections[playerID] = clientConnection
+	clientEventSender := &clientEventSenderImp{
+		clientConnections: clientConnections,
+	}
+	clientConnection.On("Close")
+	clientEventSender.close()
+	mock.AssertExpectationsForObjects(t, clientConnection)
 }

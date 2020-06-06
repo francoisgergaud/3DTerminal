@@ -87,44 +87,37 @@ func TestEngineRun(t *testing.T) {
 	screen.On("Fini")
 	bgRender.On("Render", playerID, worldMap, player, worldElements, screen)
 	shutdown := make(chan interface{})
+	connectionToServer := new(testconnector.MockServerConnection)
+	connectionToServer.On("Disconnect")
 	engine := Impl{
-		screen:       screen,
-		player:       player,
-		playerID:     playerID,
-		worldMap:     worldMap,
-		otherPlayers: worldElements,
-		renderer:     bgRender,
-		quit:         quitChannel,
-		frameRate:    frameRate,
-		shutdown:     shutdown,
+		screen:             screen,
+		player:             player,
+		playerID:           playerID,
+		worldMap:           worldMap,
+		otherPlayers:       worldElements,
+		renderer:           bgRender,
+		quit:               quitChannel,
+		frameRate:          frameRate,
+		shutdown:           shutdown,
+		connectionToServer: connectionToServer,
 	}
 	//Run is blocking
 	go engine.Run()
 	<-time.After(time.Millisecond * 2)
 	close(quitChannel)
 	<-shutdown
-	mock.AssertExpectationsForObjects(t, bgRender, screen, player)
+	mock.AssertExpectationsForObjects(t, bgRender, screen, player, connectionToServer)
 }
 
 func TestWorldUpdaterRun(t *testing.T) {
 	quitChannel := make(chan struct{})
-	playerUpdateChannel := make(chan time.Time)
-	worldElementUpdateChannel := make(chan time.Time)
-	player := &testPlayer.MockPlayer{
-		UpdateChannel: playerUpdateChannel,
-		QuitChannel:   quitChannel,
-	}
+	player := &testPlayer.MockPlayer{}
 	worldElements := make(map[string]animatedelement.AnimatedElement)
-	worldElement := &testanimatedelement.MockAnimatedElement{
-		QuitChannel:   quitChannel,
-		UpdateChannel: worldElementUpdateChannel,
-	}
+	worldElement := &testanimatedelement.MockAnimatedElement{}
 	worldElements["worldElementID"] = worldElement
 
-	player.On("Start")
-	player.On("GetUpdateChannel").Return(playerUpdateChannel)
-	worldElement.On("Start")
-	worldElement.On("GetUpdateChannel").Return(worldElementUpdateChannel)
+	player.MockAnimatedElement.On("Move")
+	worldElement.On("Move")
 
 	engine := new(testclient.MockEngine)
 	engine.On("Player").Return(player)
@@ -159,7 +152,7 @@ func TestReceiveJoinEventFromServer(t *testing.T) {
 	engine.ReceiveEventsFromServer(events)
 	playerRegistered, ok := engine.otherPlayers["player1"]
 	assert.True(t, ok)
-	assert.Equal(t, &newPlayerState, playerRegistered.GetState())
+	assert.Equal(t, &newPlayerState, playerRegistered.State())
 }
 
 func TestReceiveMovePastEventFromServer(t *testing.T) {
@@ -227,13 +220,13 @@ func TestReceiveInitializationEvents(t *testing.T) {
 	quit := make(chan struct{})
 	playerListener := &playerListenerImpl{}
 	player := new(testPlayer.MockPlayer)
-	player.On("RegisterListener", playerListener)
-	playerFactory.On("NewPlayer", &playerState, worldMapCloned, mathHelper, quit).Return(player)
+	player.MockEventPublisher.On("RegisterListener", playerListener)
+	playerFactory.On("NewPlayer", &playerState, worldMapCloned, mathHelper).Return(player)
 	consoleEventManager := new(testConsoleManager.MockConsoleEventManager)
 	consoleEventManager.On("SetPlayer", player)
 	animatedElementFactory := testanimatedelement.MockAnimatedElementFactory{}
 	otherPlayerAnimatedElement := new(testanimatedelement.MockAnimatedElement)
-	animatedElementFactory.On("NewAnimatedElementWithState", &otherPlayerState, worldMapCloned, mathHelper, quit).Return(otherPlayerAnimatedElement)
+	animatedElementFactory.On("NewAnimatedElementWithState", &otherPlayerState, worldMapCloned, mathHelper).Return(otherPlayerAnimatedElement)
 	runner := new(testrunner.MockRunner)
 	worldElementUpdater := &worldElementUpdaterImpl{}
 	engine := &Impl{
@@ -270,6 +263,30 @@ func TestReceiveInitializationEvents(t *testing.T) {
 	assert.Equal(t, otherPlayerAnimatedElement, engine.otherPlayers[otherPlayerID])
 	assert.True(t, engine.initialized)
 	mock.AssertExpectationsForObjects(t, player, worldMap, &playerFactory, consoleEventManager, &animatedElementFactory, runner)
+}
+
+func TestReceiveQuitEventFromServer(t *testing.T) {
+	otherPlayerID := "otherPlayerID"
+	otherPlayers := make(map[string]animatedelement.AnimatedElement)
+	otherPlayerLastUpdates := make(map[string]uint32)
+	otherPlayerLastUpdates[otherPlayerID] = 1
+	engine := &Impl{
+		otherPlayers:           otherPlayers,
+		initialized:            true,
+		otherPlayerLastUpdates: otherPlayerLastUpdates,
+	}
+	mockAnimatedElement := testanimatedelement.MockAnimatedElement{}
+	otherPlayers[otherPlayerID] = &mockAnimatedElement
+	events := make([]event.Event, 0)
+	events = append(events,
+		event.Event{
+			Action:   "quit",
+			PlayerID: otherPlayerID,
+		},
+	)
+	engine.ReceiveEventsFromServer(events)
+	assert.NotContains(t, engine.otherPlayers, otherPlayerID)
+	assert.NotContains(t, engine.otherPlayerLastUpdates, otherPlayerID)
 }
 
 func TestPlayerListenerRun(t *testing.T) {
@@ -314,4 +331,17 @@ func TestConnectToServer(t *testing.T) {
 	engine.ConnectToServer(serverConnection)
 	assert.Same(t, serverConnection, engine.connectionToServer)
 	assert.Same(t, serverConnection, engine.playerListener.connectionToServer)
+}
+
+func TestPlayerListenerReceiveEvent(t *testing.T) {
+	playerEventQueue := make(chan event.Event)
+	playerListener := playerListenerImpl{
+		playerEventQueue: playerEventQueue,
+	}
+	event := event.Event{
+		PlayerID: "fakePlayerID",
+	}
+	go playerListener.ReceiveEvent(event)
+	eventReceived := <-playerEventQueue
+	assert.Equal(t, eventReceived, event)
 }

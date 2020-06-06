@@ -48,9 +48,9 @@ type PlayerJoinHandler struct {
 	runner                           runner.Runner
 	server                           server.Server
 	upgrader                         websocketconnector.WebsocketUpgrader
-	websocketClientConnectionFactory func(eventToSendToCLient chan event.Event) *websocketconnector.WebSocketClientConnection
+	websocketClientConnectionFactory func(eventToSendToCLient chan event.Event, clientWebsocketSender websocketconnector.ClientWebSocketSender, wsConnection websocket.WebsocketConnection) *websocketconnector.WebSocketClientConnection
 	websocketClientListenerFactory   func(playerID string, wsConnection websocket.WebsocketConnection, server server.Server) *websocketconnector.ClientWebSocketListener
-	websocketClientSenderFactory     func(wsConnection websocket.WebsocketConnection, eventToSendToCLient chan event.Event) *websocketconnector.ClientWebSocketSender
+	websocketClientSenderFactory     func(wsConnection websocket.WebsocketConnection, eventToSendToCLient chan event.Event) *websocketconnector.ClientWebSocketSenderImpl
 }
 
 func (joinHandler *PlayerJoinHandler) ServeHTTP(writer http.ResponseWriter, reader *http.Request) {
@@ -60,10 +60,11 @@ func (joinHandler *PlayerJoinHandler) ServeHTTP(writer http.ResponseWriter, read
 		return
 	}
 	eventsToSendToClient := make(chan event.Event)
-	webSocketClientConnection := joinHandler.websocketClientConnectionFactory(eventsToSendToClient)
+	clientWebsocketSender := joinHandler.websocketClientSenderFactory(connection, eventsToSendToClient)
+	webSocketClientConnection := joinHandler.websocketClientConnectionFactory(eventsToSendToClient, clientWebsocketSender, connection)
 	//TODO: beware of the order: ClientSender must be ready to unqueue events from server for the player before register-player,
 	//as register-player would block when sending the initialization-event otherwise: make it non-blocking
-	joinHandler.runner.Start(joinHandler.websocketClientSenderFactory(connection, eventsToSendToClient))
+	joinHandler.runner.Start(clientWebsocketSender)
 	playerID := joinHandler.server.RegisterPlayer(webSocketClientConnection)
 	joinHandler.runner.Start(joinHandler.websocketClientListenerFactory(playerID, connection, joinHandler.server))
 

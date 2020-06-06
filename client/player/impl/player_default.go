@@ -15,11 +15,10 @@ import (
 )
 
 //NewPlayer builds a new player from ithe input parameters.
-func NewPlayer(playerState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) player.Player {
+func NewPlayer(playerState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper) player.Player {
 	return &Impl{
-		AnimatedElement: animatedelementImpl.NewAnimatedElementWithState(playerState, world, mathHelper, quit),
+		AnimatedElement: animatedelementImpl.NewAnimatedElementWithState(playerState, world, mathHelper),
 		EventPublisher:  publisherImpl.NewEventPublisherImpl(),
-		quitChannel:     quit,
 	}
 }
 
@@ -27,12 +26,11 @@ func NewPlayer(playerState *state.AnimatedElementState, world world.WorldMap, ma
 type Impl struct {
 	animatedelement.AnimatedElement
 	publisher.EventPublisher
-	quitChannel chan struct{}
 }
 
 // Action the player according to the input key
 func (p *Impl) Action(eventKey *tcell.EventKey) {
-	playerState := p.GetState()
+	playerState := p.State()
 	switch eventKey.Key() {
 	case tcell.KeyUp:
 		if playerState.MoveDirection == state.Backward {
@@ -59,5 +57,5 @@ func (p *Impl) Action(eventKey *tcell.EventKey) {
 			playerState.RotateDirection = state.Right
 		}
 	}
-	p.PublishEvent(event.Event{Action: "move", State: p.GetState(), TimeFrame: 0})
+	p.PublishEvent(event.Event{Action: "move", State: p.State(), TimeFrame: 0})
 }

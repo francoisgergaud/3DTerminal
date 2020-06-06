@@ -66,6 +66,7 @@ func (raycaster *RayCasterImpl) CastRay(origin *innerMath.Point2D, world world.W
 		horizontalIntersectStep.Y = -1
 	}
 	//calculate the first horizontal an vertical intersections
+	//TODO: double-check what happens when origin is negative
 	var verticalIntersect, horizontalIntersect innerMath.Point2D
 	verticalIntersect.X = float64(int(origin.X))
 	if verticalIntersectStep.X > 0 {

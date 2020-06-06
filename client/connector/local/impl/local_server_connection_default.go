@@ -41,3 +41,7 @@ func (serverConnection *LocalServerConnectionImpl) Disconnect() {}
 func (serverConnection *LocalServerConnectionImpl) SendEventsToClient(events []event.Event) {
 	serverConnection.engine.ReceiveEventsFromServer(events)
 }
+
+//Close closes the connection (doesn't do anything for a local-connection)
+func (serverConnection *LocalServerConnectionImpl) Close() {
+}

@@ -22,5 +22,5 @@ func NewPlayer(worldMap world.WorldMap, mathHelper helper.MathHelper, quit chan 
 		StepAngle: 0.01,
 		Style:     tcell.StyleDefault.Background(tcell.Color126),
 	}
-	return animatedelementImpl.NewAnimatedElementWithState(&animatedElementState, worldMap, mathHelper, quit)
+	return animatedelementImpl.NewAnimatedElementWithState(&animatedElementState, worldMap, mathHelper)
 }

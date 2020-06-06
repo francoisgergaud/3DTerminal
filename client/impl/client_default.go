@@ -44,8 +44,8 @@ type Impl struct {
 	shutdown                              chan interface{}
 	initialized                           bool
 	connectionToServer                    connector.ServerConnector
-	animatedElementFactory                func(animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper mathHelper.MathHelper, quit chan struct{}) animatedelement.AnimatedElement
-	playerFactory                         func(playerState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper, quit chan struct{}) player.Player
+	animatedElementFactory                func(animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper mathHelper.MathHelper) animatedelement.AnimatedElement
+	playerFactory                         func(playerState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper) player.Player
 }
 
 //NewEngine provides a new engine.
@@ -100,13 +100,13 @@ func NewEngine(screen tcell.Screen, consoleEventManager consolemanager.ConsoleEv
 //Initialize set the engine player and environment
 func (engine *Impl) initialize(playerID string, playerState *state.AnimatedElementState, worldMap world.WorldMap, otherPlayersState map[string]*state.AnimatedElementState, serverTimeFrame uint32) {
 	engine.playerID = playerID
-	engine.player = engine.playerFactory(playerState, worldMap, engine.mathHelper, engine.quit)
+	engine.player = engine.playerFactory(playerState, worldMap, engine.mathHelper)
 	engine.consoleEventManager.SetPlayer(engine.player)
 	engine.worldMap = worldMap
 	engine.otherPlayers = make(map[string]animatedelement.AnimatedElement)
 	engine.otherPlayerLastUpdates = make(map[string]uint32)
 	for id, otherPlayerState := range otherPlayersState {
-		engine.otherPlayers[id] = engine.animatedElementFactory(otherPlayerState, worldMap, engine.mathHelper, engine.quit)
+		engine.otherPlayers[id] = engine.animatedElementFactory(otherPlayerState, worldMap, engine.mathHelper)
 		engine.otherPlayerLastUpdates[id] = serverTimeFrame
 	}
 }
@@ -124,14 +124,17 @@ func (engine *Impl) processPostInitializationEvents(events []event.Event) {
 	for _, event := range events {
 		if event.PlayerID != engine.playerID {
 			if event.Action == "join" {
-				engine.otherPlayers[event.PlayerID] = animatedElementImpl.NewAnimatedElementWithState(event.State, engine.worldMap, engine.mathHelper, engine.quit)
+				engine.otherPlayers[event.PlayerID] = animatedElementImpl.NewAnimatedElementWithState(event.State, engine.worldMap, engine.mathHelper)
 				engine.otherPlayerLastUpdates[event.PlayerID] = event.TimeFrame
-				engine.otherPlayers[event.PlayerID].Start()
 			} else if event.Action == "move" {
 				if event.TimeFrame > engine.otherPlayerLastUpdates[event.PlayerID] {
 					engine.otherPlayers[event.PlayerID].SetState(event.State)
 					engine.otherPlayerLastUpdates[event.PlayerID] = event.TimeFrame
 				}
+			} else if event.Action == "quit" {
+				//other-player removed
+				delete(engine.otherPlayerLastUpdates, event.PlayerID)
+				delete(engine.otherPlayers, event.PlayerID)
 			}
 		}
 	}
@@ -254,20 +257,16 @@ type worldElementUpdaterImpl struct {
 
 //loop of an internal clock events to update the player an world-elements based of their state (direction, position, velocity etc...)
 func (worldElementUpdater *worldElementUpdaterImpl) Run() {
-	worldElementUpdater.engine.Player().Start()
-	for _, worldelement := range worldElementUpdater.engine.OtherPlayers() {
-		worldelement.Start()
-	}
 	worldUpdateTicker := time.NewTicker(time.Duration(1000/worldElementUpdater.updateRate) * time.Millisecond)
 	for {
 		select {
 		case <-worldElementUpdater.quit:
 			worldUpdateTicker.Stop()
 			return
-		case updateWorldTickerTime := <-worldUpdateTicker.C:
-			worldElementUpdater.engine.Player().GetUpdateChannel() <- updateWorldTickerTime
+		case <-worldUpdateTicker.C:
+			worldElementUpdater.engine.Player().Move()
 			for _, worldelement := range worldElementUpdater.engine.OtherPlayers() {
-				worldelement.GetUpdateChannel() <- updateWorldTickerTime
+				worldelement.Move()
 			}
 		}
 	}

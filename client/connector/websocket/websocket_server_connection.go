@@ -8,7 +8,7 @@ import (
 )
 
 //NewWebSocketServerConnection creates a new websocket client connection and register it to the server
-func NewWebSocketServerConnection(engine client.Engine, url string, dialer WebsocketDialer) (*WebSocketServerConnection, error) {
+func NewWebSocketServerConnection(engine client.Engine, url string, dialer WebsocketDialer, quit chan struct{}) (*WebSocketServerConnection, error) {
 	wsConnection, _, err := dialer.Dial(url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Could not dial server websocket on :"+url+", %w", err)
@@ -16,6 +16,7 @@ func NewWebSocketServerConnection(engine client.Engine, url string, dialer Webso
 	websocketServerConnection := &WebSocketServerConnection{
 		engine:       engine,
 		wsConnection: wsConnection,
+		quit:         quit,
 	}
 	websocketServerConnection.engine.ConnectToServer(websocketServerConnection)
 	//listen to the events from the server
@@ -28,6 +29,7 @@ type WebSocketServerConnection struct {
 	// The websocket connection.
 	wsConnection websocket.WebsocketConnection
 	playerID     string
+	quit         chan struct{}
 }
 
 //NotifyServer sends an event to s server
@@ -43,16 +45,13 @@ func (connection *WebSocketServerConnection) Disconnect() {
 	connection.wsConnection.Close()
 }
 
-//Start to listen events from server
-func (connection *WebSocketServerConnection) Start() {
-	connection.listenToServer()
-}
-
-func (connection *WebSocketServerConnection) listenToServer() error {
+//Run is a blocking loop listening events from server
+func (connection *WebSocketServerConnection) Run() error {
 	for {
 		eventsFromServer := make([]event.Event, 0)
 		err := connection.wsConnection.ReadJSON(&eventsFromServer)
 		if err != nil {
+			close(connection.quit)
 			return fmt.Errorf("quit client-websocket listener because of read-error: %w", err)
 		}
 		connection.engine.ReceiveEventsFromServer(eventsFromServer)

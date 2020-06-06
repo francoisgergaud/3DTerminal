@@ -4,6 +4,7 @@ import (
 	"errors"
 	"francoisgergaud/3dGame/common/event"
 	testwebsocket "francoisgergaud/3dGame/internal/testutils/common/connector"
+	testrunner "francoisgergaud/3dGame/internal/testutils/common/runner"
 	testserver "francoisgergaud/3dGame/internal/testutils/server"
 	"testing"
 
@@ -11,10 +12,23 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+type MockClientWebSocketSender struct {
+	mock.Mock
+	testrunner.MockRunnable
+}
+
+func (mock *MockClientWebSocketSender) Stop() {
+	mock.Called()
+}
+
 func TestNewWebSocketClientConnection(t *testing.T) {
 	eventToSendToCLient := make(chan event.Event)
-	clientConnection := NewWebSocketClientConnection(eventToSendToCLient)
+	clientEventSender := new(MockClientWebSocketSender)
+	wsConnection := new(testwebsocket.MockWebsockeConnection)
+	clientConnection := NewWebSocketClientConnection(eventToSendToCLient, clientEventSender, wsConnection)
 	assert.Equal(t, eventToSendToCLient, clientConnection.eventToSendToCLient)
+	assert.Same(t, clientEventSender, clientConnection.clientWebsocketSender)
+	assert.Same(t, wsConnection, clientConnection.wsConnection)
 }
 
 func TestSendEventsToClient(t *testing.T) {
@@ -27,6 +41,19 @@ func TestSendEventsToClient(t *testing.T) {
 	clientConnection.SendEventsToClient([]event.Event{event1, event2})
 	assert.Equal(t, event1, <-eventToSendToCLient)
 	assert.Equal(t, event2, <-eventToSendToCLient)
+}
+
+func TestClose(t *testing.T) {
+	clientWebsocketSender := new(MockClientWebSocketSender)
+	websocketConnection := new(testwebsocket.MockWebsockeConnection)
+	clientConnection := WebSocketClientConnection{
+		clientWebsocketSender: clientWebsocketSender,
+		wsConnection:          websocketConnection,
+	}
+	clientWebsocketSender.On("Stop")
+	websocketConnection.On("Close").Return(nil)
+	clientConnection.Close()
+	mock.AssertExpectationsForObjects(t, clientWebsocketSender, websocketConnection)
 }
 
 func TestNewClientWebSocketListener(t *testing.T) {
@@ -63,6 +90,7 @@ func TestClientWebSocketListenerRun(t *testing.T) {
 	eventFromClientWithReplacedPlayerID := eventFromClient
 	eventFromClientWithReplacedPlayerID.PlayerID = playerID
 	server.On("ReceiveEventFromClient", eventFromClientWithReplacedPlayerID)
+	server.On("UnregisterClient", playerID)
 	websocketClientListener.Run()
 	mock.AssertExpectationsForObjects(t, wsConnection, server)
 }
@@ -75,10 +103,18 @@ func TestNewClientWebSocketSender(t *testing.T) {
 	assert.Equal(t, wsConnection, websocketClientSender.wsConnection)
 }
 
-func TestClientWebSocketSenderRun(t *testing.T) {
+func TestClientWebSocketSenderStop(t *testing.T) {
+	clientWebSocketSender := &ClientWebSocketSenderImpl{
+		quit: make(chan interface{}),
+	}
+	go clientWebSocketSender.Run()
+	clientWebSocketSender.Stop()
+}
+
+func TestClientWebSocketSenderRunWithError(t *testing.T) {
 	wsConnection := new(testwebsocket.MockWebsockeConnection)
 	eventsToSendToClient := make(chan event.Event, 0)
-	clientWebSocketSender := &ClientWebSocketSender{
+	clientWebSocketSender := &ClientWebSocketSenderImpl{
 		wsConnection:        wsConnection,
 		eventToSendToClient: eventsToSendToClient,
 	}

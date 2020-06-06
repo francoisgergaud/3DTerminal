@@ -36,6 +36,7 @@ func (dialer *MockWebsocketDialer) Dial(urlStr string, requestHeader http.Header
 func TestNewWebSocketServerConnection(t *testing.T) {
 	engine := new(testClient.MockEngine)
 	var webSocketServerConnectionCapture *WebSocketServerConnection
+	quit := make(chan struct{})
 	//capture
 	engine.On("ConnectToServer", mock.MatchedBy(
 		func(wsConnector *WebSocketServerConnection) bool {
@@ -48,13 +49,14 @@ func TestNewWebSocketServerConnection(t *testing.T) {
 	mockWebsocketConnection := new(testwebsocket.MockWebsockeConnection)
 	mockWebsocketDialer.On("Dial", url, mock.AnythingOfType("http.Header")).Return(mockWebsocketConnection, nil, nil)
 	mockWebsocketConnection.On("ReadJSON", mock.AnythingOfType("*[]event.Event")).Return(nil)
-	NewWebSocketServerConnection(engine, url, mockWebsocketDialer)
+	NewWebSocketServerConnection(engine, url, mockWebsocketDialer, quit)
 	assert.Same(t, webSocketServerConnectionCapture.engine, engine)
 	assert.Same(t, webSocketServerConnectionCapture.wsConnection, mockWebsocketConnection)
+	assert.Equal(t, webSocketServerConnectionCapture.quit, quit)
 	mock.AssertExpectationsForObjects(t, mockWebsocketDialer, engine)
 }
 
-func TestListenToServer(t *testing.T) {
+func TestRun(t *testing.T) {
 	engine := new(testClient.MockEngine)
 	mockWebsocketConnection := new(testwebsocket.MockWebsockeConnection)
 	playerID := "playerTest"
@@ -62,6 +64,7 @@ func TestListenToServer(t *testing.T) {
 		engine:       engine,
 		wsConnection: mockWebsocketConnection,
 		playerID:     playerID,
+		quit:         make(chan struct{}),
 	}
 	mockWebsocketConnection.On("ReadJSON", mock.MatchedBy(
 		func(eventsFromServer *[]event.Event) bool {
@@ -71,7 +74,7 @@ func TestListenToServer(t *testing.T) {
 	)).Return(nil).Once()
 	errorFromReader := errors.New("test read-error")
 	mockWebsocketConnection.On("ReadJSON", mock.AnythingOfType("*[]event.Event")).Return(errorFromReader).Once()
-	webSocketServerConnection.listenToServer()
+	webSocketServerConnection.Run()
 	mock.AssertExpectationsForObjects(t, mockWebsocketConnection, engine)
 }
 

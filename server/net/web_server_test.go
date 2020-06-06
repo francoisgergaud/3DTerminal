@@ -61,8 +61,8 @@ type mockPlayerJoinHandlerFactories struct {
 	mock.Mock
 }
 
-func (mock *mockPlayerJoinHandlerFactories) websocketClientConnectionFactory(eventToSendToCLient chan event.Event) *websocketconnector.WebSocketClientConnection {
-	args := mock.Called(eventToSendToCLient)
+func (mock *mockPlayerJoinHandlerFactories) websocketClientConnectionFactory(eventToSendToCLient chan event.Event, clientEventSender websocketconnector.ClientWebSocketSender, wsConnection websocket.WebsocketConnection) *websocketconnector.WebSocketClientConnection {
+	args := mock.Called(eventToSendToCLient, clientEventSender, wsConnection)
 	return args.Get(0).(*websocketconnector.WebSocketClientConnection)
 }
 
@@ -71,9 +71,9 @@ func (mock *mockPlayerJoinHandlerFactories) websocketClientListenerFactory(playe
 	return args.Get(0).(*websocketconnector.ClientWebSocketListener)
 }
 
-func (mock *mockPlayerJoinHandlerFactories) websocketClientSenderFactory(wsConnection websocket.WebsocketConnection, eventToSendToCLient chan event.Event) *websocketconnector.ClientWebSocketSender {
+func (mock *mockPlayerJoinHandlerFactories) websocketClientSenderFactory(wsConnection websocket.WebsocketConnection, eventToSendToCLient chan event.Event) *websocketconnector.ClientWebSocketSenderImpl {
 	args := mock.Called(wsConnection, eventToSendToCLient)
-	return args.Get(0).(*websocketconnector.ClientWebSocketSender)
+	return args.Get(0).(*websocketconnector.ClientWebSocketSenderImpl)
 }
 
 func TestNewWebServer(t *testing.T) {
@@ -126,14 +126,8 @@ func TestPlayerJoinHandlerServeHTTP(t *testing.T) {
 	websocketConnection := new(testwebsocket.MockWebsockeConnection)
 	websocketUpgrader.On("Upgrade", reponseWriter, reader, http.Header(nil)).Return(websocketConnection, nil)
 	clientConnection := new(websocketconnector.WebSocketClientConnection)
-	var eventsChannelForClientFactory chan event.Event
-	playerJoinHandlerFactories.On("websocketClientConnectionFactory", mock.MatchedBy(
-		func(eventsChannel chan event.Event) bool {
-			eventsChannelForClientFactory = eventsChannel
-			return true
-		},
-	)).Return(clientConnection)
-	clientWebsocketSender := new(websocketconnector.ClientWebSocketSender)
+
+	clientWebsocketSender := &websocketconnector.ClientWebSocketSenderImpl{}
 	var eventsChannelForClientSenderFactory chan event.Event
 	playerJoinHandlerFactories.On("websocketClientSenderFactory", websocketConnection, mock.MatchedBy(
 		func(eventsChannel chan event.Event) bool {
@@ -141,6 +135,13 @@ func TestPlayerJoinHandlerServeHTTP(t *testing.T) {
 			return true
 		},
 	)).Return(clientWebsocketSender)
+	var eventsChannelForClientFactory chan event.Event
+	playerJoinHandlerFactories.On("websocketClientConnectionFactory", mock.MatchedBy(
+		func(eventsChannel chan event.Event) bool {
+			eventsChannelForClientFactory = eventsChannel
+			return true
+		},
+	), clientWebsocketSender, websocketConnection).Return(clientConnection)
 	server.On("RegisterPlayer", clientConnection).Return(playerID)
 	clientWebsocketListener := new(websocketconnector.ClientWebSocketListener)
 	playerJoinHandlerFactories.On("websocketClientListenerFactory", playerID, websocketConnection, server).Return(clientWebsocketListener)

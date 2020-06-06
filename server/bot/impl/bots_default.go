@@ -25,7 +25,7 @@ type Bot interface {
 func NewBotImpl(id string, initialPosition *internalMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper mathHelper.MathHelper, quit chan struct{}) bot.Bot {
 	result := BotImpl{
 		id:              id,
-		AnimatedElement: animatedelementImpl.NewAnimatedElement(initialPosition, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, world, mathHelper, quit),
+		AnimatedElement: animatedelementImpl.NewAnimatedElement(initialPosition, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, world, mathHelper),
 		EventPublisher:  publisherImpl.NewEventPublisherImpl(),
 		mathHelper:      mathHelper,
 		world:           world,
@@ -44,7 +44,7 @@ type BotImpl struct {
 
 //Move the bot's position depending on the colision of walls
 func (bot *BotImpl) Move() {
-	state := bot.GetState()
+	state := bot.State()
 	rayDestination := bot.mathHelper.CastRay(state.Position, bot.world, state.Angle, state.Velocity)
 	if rayDestination != nil {
 		//horizontal rebound

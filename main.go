@@ -4,8 +4,6 @@ import (
 	"fmt"
 	_ "net/http/pprof"
 	"os"
-
-	"github.com/gdamore/tcell"
 )
 
 func main() {
@@ -18,16 +16,7 @@ func main() {
 	// 	}
 	// }()
 	fmt.Println("terminal: " + os.Getenv("TERM"))
-	tcell.SetEncodingFallback(tcell.EncodingFallbackUTF8)
-	screen, e := tcell.NewScreen()
-	if e != nil {
-		panic(e)
-	}
-	if e = screen.Init(); e != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", e)
-		panic(e)
-	}
-	err := InitGame(screen)
+	err := InitGame()
 	if err != nil {
 		panic(err)
 	}

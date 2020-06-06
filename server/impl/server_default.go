@@ -16,10 +16,15 @@ import (
 	botgenerator "francoisgergaud/3dGame/server/impl/generator/bot"
 	"francoisgergaud/3dGame/server/impl/generator/worldmap"
 	"francoisgergaud/3dGame/server/impl/player"
+	"log"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var info = log.New(os.Stderr, "INFO ", 0)
 
 //Impl is the default implementation for a server.
 type Impl struct {
@@ -67,6 +72,7 @@ func NewServer(worldUpdateRate int, quit chan struct{}) (*Impl, error) {
 
 //Start the server
 func (server *Impl) Start() {
+	info.Print("starting server...")
 	//initialize the environment (world and bots)
 	server.worldMap = server.worldMapFactory()
 	botID := server.identifierFactory().String()
@@ -75,17 +81,31 @@ func (server *Impl) Start() {
 	//start the asynchronous listeners
 	server.runner.Start(server.clientEventSender)
 	server.runner.Start(server)
+	server.setupCloseHandler()
+	info.Print("done. Press ctrl+c to quit")
+}
+
+func (server *Impl) setupCloseHandler() {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		<-c
+		fmt.Println("\r- Ctrl+C pressed in Terminal")
+		server.clientEventSender.close()
+		os.Exit(0)
+	}()
 }
 
 //RegisterPlayer register a player and provide the environment
 func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) string {
 	playerID := server.identifierFactory().String()
-	server.clientEventSender.AddClient(playerID, clientConnection)
+	info.Printf("register new player with id %v", playerID)
+	server.clientEventSender.addClient(playerID, clientConnection)
 	player := server.playerFactory(server.worldMap, server.mathHelper, server.quit)
 	server.players[playerID] = player
 	newPlayerEvent := event.Event{
 		PlayerID: playerID,
-		State:    player.GetState(),
+		State:    player.State(),
 		Action:   "join",
 	}
 	worldMap := server.worldMap.Clone()
@@ -93,11 +113,11 @@ func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) 
 	otherPlayers := make(map[string]state.AnimatedElementState)
 	for id, player := range server.players {
 		if id != playerID {
-			otherPlayers[id] = player.GetState().Clone()
+			otherPlayers[id] = player.State().Clone()
 		}
 	}
 	for id, bot := range server.bots {
-		otherPlayers[id] = bot.GetState().Clone()
+		otherPlayers[id] = bot.State().Clone()
 	}
 	extraData := make(map[string]interface{})
 	extraData["worldMap"] = worldMap
@@ -105,18 +125,18 @@ func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) 
 	newPlayerInitializationEvent := event.Event{
 		Action:    "init",
 		PlayerID:  playerID,
-		State:     player.GetState(),
+		State:     player.State(),
 		ExtraData: extraData,
 	}
-	server.clientEventSender.SendEventToClient(playerID, newPlayerInitializationEvent)
-	server.players[playerID].Start()
+	server.clientEventSender.sendEventToClient(playerID, newPlayerInitializationEvent)
 	return playerID
 }
 
 //UnregisterClient removes a player
 func (server *Impl) UnregisterClient(playerID string) {
+	info.Printf("unregister new player with id %v", playerID)
 	delete(server.players, playerID)
-	server.clientEventSender.RemoveClient(playerID)
+	server.clientEventSender.removeClient(playerID)
 	event := event.Event{
 		PlayerID: playerID,
 		Action:   "quit",
@@ -133,13 +153,13 @@ func (server *Impl) ReceiveEventFromClient(event event.Event) {
 
 //Run is a blocking loop using a ticket to update the environment
 func (server *Impl) Run() {
-	botsTicker := time.NewTicker(time.Duration(1000/server.botsUpdateRate) * time.Millisecond)
+	environmentTicker := time.NewTicker(time.Duration(1000/server.botsUpdateRate) * time.Millisecond)
 	for {
 		select {
 		case <-server.quit:
-			botsTicker.Stop()
+			environmentTicker.Stop()
 			return
-		case <-botsTicker.C:
+		case <-environmentTicker.C:
 			for _, bot := range server.bots {
 				bot.Move()
 			}
@@ -152,10 +172,11 @@ func (server *Impl) Run() {
 
 type clientEventSender interface {
 	runner.Runnable
-	AddClient(playerID string, connectionToClient connector.ClientConnection)
-	RemoveClient(playerID string)
-	SendEventToClient(playerID string, eventToSend event.Event)
+	addClient(playerID string, connectionToClient connector.ClientConnection)
+	removeClient(playerID string)
+	sendEventToClient(playerID string, eventToSend event.Event)
 	publisher.EventListener
+	close()
 }
 
 type clientEventSenderImp struct {
@@ -190,19 +211,26 @@ func (clientEventSender *clientEventSenderImp) Run() {
 	}
 }
 
-func (clientEventSender *clientEventSenderImp) AddClient(playerID string, connectionToClient connector.ClientConnection) {
+func (clientEventSender *clientEventSenderImp) addClient(playerID string, connectionToClient connector.ClientConnection) {
 	clientEventSender.clientConnections[playerID] = connectionToClient
 }
 
-func (clientEventSender *clientEventSenderImp) RemoveClient(playerID string) {
+func (clientEventSender *clientEventSenderImp) removeClient(playerID string) {
+	clientEventSender.clientConnections[playerID].Close()
 	delete(clientEventSender.clientConnections, playerID)
 }
 
-func (clientEventSender *clientEventSenderImp) SendEventToClient(playerID string, eventToSend event.Event) {
+func (clientEventSender *clientEventSenderImp) sendEventToClient(playerID string, eventToSend event.Event) {
 	eventToSend.TimeFrame = clientEventSender.timeFrame
 	clientEventSender.clientConnections[playerID].SendEventsToClient([]event.Event{eventToSend})
 }
 
 func (clientEventSender *clientEventSenderImp) ReceiveEvent(event event.Event) {
 	clientEventSender.eventQueue <- event
+}
+
+func (clientEventSender *clientEventSenderImp) close() {
+	for _, clientConnection := range clientEventSender.clientConnections {
+		clientConnection.Close()
+	}
 }
