@@ -1,10 +1,10 @@
 package impl
 
 import (
-	"francoisgergaud/3dGame/client/player"
 	"francoisgergaud/3dGame/client/render"
 	"francoisgergaud/3dGame/client/render/mathhelper"
 	"francoisgergaud/3dGame/common/environment/animatedelement"
+	"francoisgergaud/3dGame/common/environment/animatedelement/projectile"
 	"francoisgergaud/3dGame/common/environment/world"
 	commonMathHelper "francoisgergaud/3dGame/common/math/helper"
 	"math"
@@ -31,7 +31,7 @@ type RendererImpl struct {
 //CreateRenderer is a factory:
 func CreateRenderer(screenWidth, screenHeight int, raySampler RaySampler, mathHelper commonMathHelper.MathHelper, renderMathHelper mathhelper.RendererMathHelper, fieldOfViewAngle, visibility float64) render.Renderer {
 	wallRendererProducer := createWallRendererProducer(screenWidth, screenHeight, fieldOfViewAngle, visibility, mathHelper, renderMathHelper, tcell.StyleDefault.Background(tcell.ColorBlueViolet), raySampler)
-	worldElementRendererProducer := createWorldElementRendererProducer(mathHelper, renderMathHelper, screenHeight, screenWidth)
+	worldElementRendererProducer := createWorldElementRendererProducer(mathHelper, renderMathHelper, screenHeight, screenWidth, visibility)
 	return createRenderer(screenWidth, screenHeight, renderMathHelper, fieldOfViewAngle, wallRendererProducer, worldElementRendererProducer)
 }
 
@@ -52,7 +52,7 @@ func createRenderer(screenWidth, screenHeight int, renderMathHelper mathhelper.R
 // 3 - sort these renderers by depth
 // 4 - render each renderer from the deepest to the nearest.
 // 5 - update the screen
-func (renderer *RendererImpl) Render(playerID string, worldMap world.WorldMap, player player.Player, worldElements map[string]animatedelement.AnimatedElement, screen tcell.Screen) {
+func (renderer *RendererImpl) Render(playerID string, worldMap world.WorldMap, player animatedelement.AnimatedElement, worldElements map[string]animatedelement.AnimatedElement, projectiles map[string]projectile.Projectile, screen tcell.Screen) {
 	screen.Clear()
 	renderers := make([]elementRenderer, 0)
 	for columnIndex := 0; columnIndex < renderer.screenWidth; columnIndex++ {
@@ -68,6 +68,14 @@ func (renderer *RendererImpl) Render(playerID string, worldMap world.WorldMap, p
 			}
 		}
 	}
+	if projectiles != nil {
+		for _, projectile := range projectiles {
+			projectileRenderer := renderer.worldElementRendererProducer.getRenderer(player, renderer.fieldOfViewAngle, projectile)
+			if projectileRenderer != nil {
+				renderers = append(renderers, projectileRenderer)
+			}
+		}
+	}
 	// sort the 'elementRenderers' array by their ditance (from grater to lower) and render them.
 	sort.Slice(renderers, func(e1, e2 int) bool {
 		return renderers[e1].getDistance() > renderers[e2].getDistance()
@@ -80,7 +88,7 @@ func (renderer *RendererImpl) Render(playerID string, worldMap world.WorldMap, p
 
 //wallRendererProducer provides functionalities to produce a wall-and-background renderer.
 type wallRendererProducer interface {
-	getRenderer(screen tcell.Screen, player player.Player, worldMap world.WorldMap, columnIndex int) elementRenderer
+	getRenderer(screen tcell.Screen, player animatedelement.AnimatedElement, worldMap world.WorldMap, columnIndex int) elementRenderer
 }
 
 //wallRendererProducerImpl implements the WallRendererProducer interface.
@@ -120,7 +128,7 @@ func createWallRendererProducer(screenWidth, screenHeight int, fieldOfViewAngle,
 //   3 - get the projection-distance from the player to the destination of the ray-casted (to avoid the "fish-eye" effect.)
 //   4 - Get the wall'style (this rendreralso manage the wall's angle to display them in another color)
 //   5 - for each row of the column, set the style and rune to be rendered.
-func (wallRendererProducer *wallRendererProducerImpl) getRenderer(screen tcell.Screen, player player.Player, worldMap world.WorldMap, columnIndex int) elementRenderer {
+func (wallRendererProducer *wallRendererProducerImpl) getRenderer(screen tcell.Screen, player animatedelement.AnimatedElement, worldMap world.WorldMap, columnIndex int) elementRenderer {
 	playerState := player.State()
 	//calculate the ray's angle
 	rayTracingAngle := wallRendererProducer.renderMathHelper.GetRayTracingAngleForColumn(playerState.Angle, columnIndex, wallRendererProducer.screenWidth, wallRendererProducer.fieldOfViewAngle)
@@ -129,7 +137,7 @@ func (wallRendererProducer *wallRendererProducerImpl) getRenderer(screen tcell.S
 	if rayCastDestination != nil {
 		distance := wallRendererProducer.renderMathHelper.CalculateProjectionDistance(playerState.Position, rayCastDestination, playerState.Angle-rayTracingAngle)
 		var wallStyle tcell.Style
-		wallRowStart, wallRowEnd := wallRendererProducer.renderMathHelper.GetFillRowRange(distance, float64(wallRendererProducer.screenHeight))
+		wallRowStart, wallRowEnd := wallRendererProducer.renderMathHelper.GetFillRowRange(distance, wallRendererProducer.visibility, 1.0, wallRendererProducer.screenHeight)
 		isWallAngle := wallRendererProducer.renderMathHelper.IsWallAngle(rayCastDestination)
 		if isWallAngle {
 			wallStyle = wallRendererProducer.wallAngleStyle
@@ -155,7 +163,7 @@ func (wallRendererProducer *wallRendererProducerImpl) getRenderer(screen tcell.S
 
 //worldElementRendererProducer provides functionalities to produce a wall-and-background renderer.
 type worldElementRendererProducer interface {
-	getRenderer(player player.Player, fieldOfViewAngle float64, worldElement animatedelement.AnimatedElement) elementRenderer
+	getRenderer(player animatedelement.AnimatedElement, fieldOfViewAngle float64, worldElement animatedelement.AnimatedElement) elementRenderer
 }
 
 //worldElementRendererProducerImpl implements the WorldElementRendererProducer.
@@ -168,25 +176,31 @@ type worldElementRendererProducerImpl struct {
 	screenHeight int
 	//the screen-width.
 	screenWidth int
+	// the maximum visibility (i.e. :distance from which object are not visible)
+	maxVisibility float64
+	//height of the world-element
+	height float64
 }
 
 //createWorldElementRendererProducer creates a WorldElementRendererProducer.
-func createWorldElementRendererProducer(mathHelper commonMathHelper.MathHelper, rendererMathHelper mathhelper.RendererMathHelper, screenHeight, screenWidth int) worldElementRendererProducer {
+func createWorldElementRendererProducer(mathHelper commonMathHelper.MathHelper, rendererMathHelper mathhelper.RendererMathHelper, screenHeight, screenWidth int, maxVisibility float64) worldElementRendererProducer {
 	return &worldElementRendererProducerImpl{
 		mathHelper:       mathHelper,
 		renderMathHelper: rendererMathHelper,
 		screenHeight:     screenHeight,
 		screenWidth:      screenWidth,
+		maxVisibility:    maxVisibility,
+		height:           1.0,
 	}
 }
 
-func (WorldElementRendererProducer *worldElementRendererProducerImpl) getRenderer(player player.Player, fieldOfViewAngle float64, worldElement animatedelement.AnimatedElement) elementRenderer {
+func (WorldElementRendererProducer *worldElementRendererProducerImpl) getRenderer(player animatedelement.AnimatedElement, fieldOfViewAngle float64, worldElement animatedelement.AnimatedElement) elementRenderer {
 	playerState := player.State()
 	worldElementState := worldElement.State()
 	isVisible, startScreenWidthRatio, startOffset, endScreenWidthRatio, endOffset := WorldElementRendererProducer.mathHelper.GetWorldElementProjection(playerState.Position, playerState.Angle, fieldOfViewAngle, worldElementState.Position, worldElementState.Size)
 	if isVisible {
 		distance := playerState.Position.Distance(worldElement.State().Position)
-		worldElementRowStart, worldElementRowEnd := WorldElementRendererProducer.renderMathHelper.GetFillRowRange(distance, float64(WorldElementRendererProducer.screenHeight))
+		worldElementRowStart, worldElementRowEnd := WorldElementRendererProducer.renderMathHelper.GetFillRowRange(distance, WorldElementRendererProducer.maxVisibility, WorldElementRendererProducer.height, WorldElementRendererProducer.screenHeight)
 		return &worldElementRenderer{
 			distance:                distance,
 			screenHeight:            WorldElementRendererProducer.screenHeight,

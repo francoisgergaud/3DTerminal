@@ -1,8 +1,8 @@
 package impl
 
 import (
+	"francoisgergaud/3dGame/client"
 	"francoisgergaud/3dGame/client/consolemanager"
-	"francoisgergaud/3dGame/client/player"
 
 	"github.com/gdamore/tcell"
 )
@@ -18,13 +18,13 @@ func NewConsoleEventManager(screen tcell.Screen, quit chan<- interface{}) consol
 //ConsoleEventManagerImpl is the implementation of the ConsoleEventManager interface.
 type ConsoleEventManagerImpl struct {
 	screen      tcell.Screen
-	player      player.Player
+	engine      client.Engine
 	quitChannel chan<- interface{}
 }
 
 //SetPlayer set the player the console-event will be sent to
-func (consoleEventManager *ConsoleEventManagerImpl) SetPlayer(player player.Player) {
-	consoleEventManager.player = player
+func (consoleEventManager *ConsoleEventManagerImpl) SetPlayer(engine client.Engine) {
+	consoleEventManager.engine = engine
 }
 
 //Run is a blocking loop listening to the events emited by the terminal.
@@ -34,12 +34,12 @@ func (consoleEventManager *ConsoleEventManagerImpl) Run() error {
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
 			switch ev.Key() {
-			case tcell.KeyEscape, tcell.KeyEnter:
+			case tcell.KeyEscape:
 				close(consoleEventManager.quitChannel)
 				return nil
 			default:
-				if consoleEventManager.player != nil {
-					consoleEventManager.player.Action(ev)
+				if consoleEventManager.engine != nil {
+					consoleEventManager.engine.Action(ev)
 				}
 			}
 		case *tcell.EventResize:

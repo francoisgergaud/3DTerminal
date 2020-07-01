@@ -15,8 +15,8 @@ type MockAnimatedElementFactory struct {
 }
 
 //NewAnimatedElementWithState mocks the creation of new animated-element
-func (mock *MockAnimatedElementFactory) NewAnimatedElementWithState(animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper) animatedelement.AnimatedElement {
-	args := mock.Called(animatedElementState, world, mathHelper)
+func (mock *MockAnimatedElementFactory) NewAnimatedElementWithState(id string, animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper) animatedelement.AnimatedElement {
+	args := mock.Called(id, animatedElementState, world, mathHelper)
 	return args.Get(0).(animatedelement.AnimatedElement)
 }
 
@@ -39,4 +39,10 @@ func (mock *MockAnimatedElement) State() *state.AnimatedElementState {
 //SetState mocks the animated-element's state.
 func (mock *MockAnimatedElement) SetState(state *state.AnimatedElementState) {
 	mock.Called(state)
+}
+
+//ID mocks the animated-element's state.
+func (mock *MockAnimatedElement) ID() string {
+	args := mock.Called()
+	return args.String(0)
 }

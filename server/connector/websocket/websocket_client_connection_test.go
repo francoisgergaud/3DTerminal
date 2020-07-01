@@ -12,6 +12,15 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+type MockFactories struct {
+	mock.Mock
+}
+
+func (mockFactory *MockFactories) bufferProvider() []event.Event {
+	args := mockFactory.Called()
+	return args.Get(0).([]event.Event)
+}
+
 type MockClientWebSocketSender struct {
 	mock.Mock
 	testrunner.MockRunnable
@@ -70,29 +79,36 @@ func TestClientWebSocketListenerRun(t *testing.T) {
 	playerID := "playerID"
 	wsConnection := new(testwebsocket.MockWebsockeConnection)
 	server := new(testserver.MockServer)
+	mockFactories := new(MockFactories)
 	websocketClientListener := &ClientWebSocketListener{
-		playerID:     playerID,
-		wsConnection: wsConnection,
-		server:       server,
+		playerID:       playerID,
+		wsConnection:   wsConnection,
+		server:         server,
+		bufferProvider: mockFactories.bufferProvider,
 	}
 	eventFromClient := event.Event{
 		Action:   "testAction",
 		PlayerID: "testPlayerID",
 	}
-	wsConnection.On("ReadJSON", mock.MatchedBy(
-		func(eventsRead *[]event.Event) bool {
-			(*eventsRead) = append(*eventsRead, eventFromClient)
-			return true
+	eventsFromServer := make([]event.Event, 0)
+	eventsFromServer2 := make([]event.Event, 0)
+	mockFactories.On("bufferProvider").Return(eventsFromServer).Once()
+	mockFactories.On("bufferProvider").Return(eventsFromServer2).Once()
+	wsConnection.On("ReadJSON", &eventsFromServer).Return(nil).Run(
+		func(args mock.Arguments) {
+			events := args.Get(0).(*[]event.Event)
+			*events = []event.Event{eventFromClient}
 		},
-	),
-	).Return(nil).Once()
-	wsConnection.On("ReadJSON", mock.AnythingOfType("*[]event.Event")).Return(errors.New("second read error"))
+	).Once()
+	wsConnection.On("ReadJSON", &eventsFromServer2).Return(errors.New("second read error")).Once()
 	eventFromClientWithReplacedPlayerID := eventFromClient
 	eventFromClientWithReplacedPlayerID.PlayerID = playerID
 	server.On("ReceiveEventFromClient", eventFromClientWithReplacedPlayerID)
 	server.On("UnregisterClient", playerID)
+
 	websocketClientListener.Run()
-	mock.AssertExpectationsForObjects(t, wsConnection, server)
+
+	mock.AssertExpectationsForObjects(t, wsConnection, server, mockFactories)
 }
 
 func TestNewClientWebSocketSender(t *testing.T) {

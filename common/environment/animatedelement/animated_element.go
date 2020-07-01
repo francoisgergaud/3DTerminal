@@ -9,4 +9,5 @@ type AnimatedElement interface {
 	Move()
 	State() *state.AnimatedElementState
 	SetState(state *state.AnimatedElementState)
+	ID() string
 }

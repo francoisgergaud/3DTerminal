@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewWorldElementImpl(t *testing.T) {
+func TestNewAnimatedElementImpl(t *testing.T) {
 	position := &innerMath.Point2D{}
 	initialAngle := 1.5
 	velocity := 1.3
@@ -23,7 +23,8 @@ func TestNewWorldElementImpl(t *testing.T) {
 	style := tcell.StyleDefault.Background(tcell.Color104)
 	worldMap := new(testworld.MockWorldMap)
 	mathHelper := new(testmath.MockMathHelper)
-	animatedElement := NewAnimatedElement(position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
+	animatedElementID := "id"
+	animatedElement := NewAnimatedElement(animatedElementID, position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
 	assert.NotNil(t, animatedElement)
 	state := animatedElement.State()
 	assert.Equal(t, position, state.Position)
@@ -34,6 +35,7 @@ func TestNewWorldElementImpl(t *testing.T) {
 	assert.Equal(t, moveDirection, state.MoveDirection)
 	assert.Equal(t, rotateDirection, state.RotateDirection)
 	assert.Equal(t, style, state.Style)
+	assert.Equal(t, animatedElementID, animatedElement.ID())
 }
 
 func TestMoveLeft(t *testing.T) {
@@ -47,7 +49,7 @@ func TestMoveLeft(t *testing.T) {
 	style := tcell.StyleDefault.Background(tcell.Color104)
 	worldMap := new(testworld.MockWorldMap)
 	mathHelper := new(testmath.MockMathHelper)
-	animatedElement := NewAnimatedElement(position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
+	animatedElement := NewAnimatedElement("id", position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
 	animatedElement.Move()
 	assert.Equal(t, 1.4, animatedElement.State().Angle)
 	assert.True(t, innerMath.Point2D{X: 1, Y: 1}.AlmostEquals(animatedElement.State().Position))
@@ -64,7 +66,7 @@ func TestMoveLeftAngleReset(t *testing.T) {
 	style := tcell.StyleDefault.Background(tcell.Color104)
 	worldMap := new(testworld.MockWorldMap)
 	mathHelper := new(testmath.MockMathHelper)
-	animatedElement := NewAnimatedElement(position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
+	animatedElement := NewAnimatedElement("id", position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
 	animatedElement.Move()
 	assert.Equal(t, 1.9, animatedElement.State().Angle)
 	assert.True(t, innerMath.Point2D{X: 1, Y: 1}.AlmostEquals(animatedElement.State().Position))
@@ -81,7 +83,7 @@ func TestMoveRight(t *testing.T) {
 	style := tcell.StyleDefault.Background(tcell.Color104)
 	worldMap := new(testworld.MockWorldMap)
 	mathHelper := new(testmath.MockMathHelper)
-	animatedElement := NewAnimatedElement(position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
+	animatedElement := NewAnimatedElement("id", position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
 	animatedElement.Move()
 	assert.Equal(t, 1.6, animatedElement.State().Angle)
 	assert.True(t, innerMath.Point2D{X: 1, Y: 1}.AlmostEquals(animatedElement.State().Position))
@@ -98,7 +100,7 @@ func TestMoveRightAngleReset(t *testing.T) {
 	style := tcell.StyleDefault.Background(tcell.Color104)
 	worldMap := new(testworld.MockWorldMap)
 	mathHelper := new(testmath.MockMathHelper)
-	animatedElement := NewAnimatedElement(position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
+	animatedElement := NewAnimatedElement("id", position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
 	animatedElement.Move()
 	assert.True(t, AreFloatAlmostEquals(0.1, animatedElement.State().Angle, 0.001))
 	assert.True(t, innerMath.Point2D{X: 1, Y: 1}.AlmostEquals(animatedElement.State().Position))
@@ -120,7 +122,7 @@ func TestMoveForward(t *testing.T) {
 	worldMap := new(testworld.MockWorldMap)
 	mathHelper := new(testmath.MockMathHelper)
 	worldMap.On("GetCellValue", 1, 1).Return(0)
-	animatedElement := NewAnimatedElement(position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
+	animatedElement := NewAnimatedElement("id", position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
 	animatedElement.Move()
 	assert.True(t, innerMath.Point2D{X: 1.1, Y: 1}.AlmostEquals(animatedElement.State().Position))
 }
@@ -137,7 +139,7 @@ func TestMoveBackward(t *testing.T) {
 	worldMap := new(testworld.MockWorldMap)
 	mathHelper := new(testmath.MockMathHelper)
 	worldMap.On("GetCellValue", 0, 1).Return(0)
-	animatedElement := NewAnimatedElement(position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
+	animatedElement := NewAnimatedElement("id", position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
 	animatedElement.Move()
 	assert.True(t, innerMath.Point2D{X: 0.9, Y: 1}.AlmostEquals(animatedElement.State().Position))
 }
@@ -154,7 +156,7 @@ func TestMoveForwardWithWall(t *testing.T) {
 	worldMap := new(testworld.MockWorldMap)
 	mathHelper := new(testmath.MockMathHelper)
 	worldMap.On("GetCellValue", 1, 1).Return(1)
-	animatedElement := NewAnimatedElement(position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
+	animatedElement := NewAnimatedElement("id", position, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, worldMap, mathHelper)
 	animatedElement.Move()
 	assert.True(t, innerMath.Point2D{X: 1, Y: 1}.AlmostEquals(animatedElement.State().Position))
 }
@@ -164,7 +166,16 @@ func TestSetState(t *testing.T) {
 	worldMap := new(testworld.MockWorldMap)
 	mathHelper := new(testmath.MockMathHelper)
 	worldMap.On("GetCellValue", 1, 1).Return(1)
-	animatedElement := NewAnimatedElementWithState(&state.AnimatedElementState{}, worldMap, mathHelper)
+	animatedElement := NewAnimatedElementWithState("id", &state.AnimatedElementState{}, worldMap, mathHelper)
 	animatedElement.SetState(newState)
 	assert.Equal(t, newState, animatedElement.State())
+}
+
+func TestID(t *testing.T) {
+	animatedElementID := "idTest"
+	worldMap := new(testworld.MockWorldMap)
+	mathHelper := new(testmath.MockMathHelper)
+	animatedElement := NewAnimatedElementWithState(animatedElementID, &state.AnimatedElementState{}, worldMap, mathHelper)
+	animatedElement.ID()
+	assert.Equal(t, animatedElementID, animatedElement.ID())
 }

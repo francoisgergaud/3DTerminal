@@ -29,7 +29,11 @@ type LocalServerConnectionImpl struct {
 func (serverConnection *LocalServerConnectionImpl) NotifyServer(events []event.Event) error {
 	for _, event := range events {
 		event.PlayerID = serverConnection.playerID
-		serverConnection.server.ReceiveEventFromClient(event)
+		eventClone, err := event.Clone()
+		if err != nil {
+			return err
+		}
+		serverConnection.server.ReceiveEventFromClient(*eventClone)
 	}
 	return nil
 }
@@ -38,8 +42,17 @@ func (serverConnection *LocalServerConnectionImpl) NotifyServer(events []event.E
 func (serverConnection *LocalServerConnectionImpl) Disconnect() {}
 
 //SendEventsToClient sends a list of events to the client
-func (serverConnection *LocalServerConnectionImpl) SendEventsToClient(events []event.Event) {
-	serverConnection.engine.ReceiveEventsFromServer(events)
+func (serverConnection *LocalServerConnectionImpl) SendEventsToClient(events []event.Event) error {
+	eventsClone := make([]event.Event, len(events))
+	for i, eventToClone := range events {
+		eventClone, err := eventToClone.Clone()
+		if err != nil {
+			return err
+		}
+		eventsClone[i] = *eventClone
+	}
+	serverConnection.engine.ReceiveEventsFromServer(eventsClone)
+	return nil
 }
 
 //Close closes the connection (doesn't do anything for a local-connection)

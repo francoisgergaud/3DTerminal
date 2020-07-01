@@ -3,10 +3,11 @@ package impl
 import (
 	"fmt"
 	"francoisgergaud/3dGame/common/environment/animatedelement"
+	"francoisgergaud/3dGame/common/environment/animatedelement/projectile"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
-	"francoisgergaud/3dGame/common/event/publisher"
+	"francoisgergaud/3dGame/common/math"
 	"francoisgergaud/3dGame/common/math/helper"
 	mathhelper "francoisgergaud/3dGame/common/math/helper"
 	"francoisgergaud/3dGame/common/math/raycaster"
@@ -14,8 +15,8 @@ import (
 	"francoisgergaud/3dGame/server/bot"
 	"francoisgergaud/3dGame/server/connector"
 	botgenerator "francoisgergaud/3dGame/server/impl/generator/bot"
+	"francoisgergaud/3dGame/server/impl/generator/player"
 	"francoisgergaud/3dGame/server/impl/generator/worldmap"
-	"francoisgergaud/3dGame/server/impl/player"
 	"log"
 	"os"
 	"time"
@@ -29,7 +30,8 @@ var info = log.New(os.Stderr, "INFO ", 0)
 type Impl struct {
 	worldMap          world.WorldMap
 	players           map[string]animatedelement.AnimatedElement
-	bots              map[string]bot.Bot
+	projectiles       map[string]projectile.Projectile
+	botIDs            []string
 	quit              chan interface{}
 	botsUpdateRate    int
 	mathHelper        mathhelper.MathHelper
@@ -38,19 +40,22 @@ type Impl struct {
 	identifierFactory func() uuid.UUID
 	worldMapFactory   func() world.WorldMap
 	botFactory        func(id string, worldMap world.WorldMap, mathHelper mathhelper.MathHelper, quit <-chan interface{}) bot.Bot
-	playerFactory     func(worldMap world.WorldMap, mathHelper helper.MathHelper, quit <-chan interface{}) animatedelement.AnimatedElement
+	playerFactory     func(wid string, orldMap world.WorldMap, mathHelper helper.MathHelper, quit <-chan interface{}) animatedelement.AnimatedElement
+	projectileFactory func(id string, position *math.Point2D, angle float64, world world.WorldMap, otherPlayers map[string]animatedelement.AnimatedElement, mathHelper helper.MathHelper) projectile.Projectile
+	spawner           player.Spawner
 }
 
 //NewServer is a server factory
 func NewServer(worldUpdateRate int, quit chan interface{}) (*Impl, error) {
 	server := new(Impl)
-	server.bots = make(map[string]bot.Bot)
+	server.botIDs = make([]string, 0)
 	mathHelper, err := mathhelper.NewMathHelper(new(raycaster.RayCasterImpl))
 	server.mathHelper = mathHelper
 	if err != nil {
 		return nil, fmt.Errorf("error while instantiating the math-helper: %w", err)
 	}
 	server.players = make(map[string]animatedelement.AnimatedElement)
+	server.projectiles = make(map[string]projectile.Projectile)
 	eventQueue := make(chan event.Event, 100)
 	server.clientEventSender = &clientEventSenderImp{
 		clientConnections: make(map[string]connector.ClientConnection),
@@ -67,7 +72,9 @@ func NewServer(worldUpdateRate int, quit chan interface{}) (*Impl, error) {
 	server.worldMapFactory = worldmap.NewWorldMap
 	server.botFactory = botgenerator.NewBot
 	server.playerFactory = player.NewPlayer
-
+	server.projectileFactory = projectile.NewProjectile
+	server.spawner = player.NewStaticSpawner(server.players)
+	server.spawner.RegisterListener(server)
 	return server, nil
 }
 
@@ -77,8 +84,10 @@ func (server *Impl) Start() {
 	//initialize the environment (world and bots)
 	server.worldMap = server.worldMapFactory()
 	botID := server.identifierFactory().String()
-	server.bots[botID] = server.botFactory(botID, server.worldMap, server.mathHelper, server.quit)
-	server.bots[botID].RegisterListener(server.clientEventSender)
+	bot := server.botFactory(botID, server.worldMap, server.mathHelper, server.quit)
+	bot.RegisterListener(server)
+	server.players[botID] = bot
+	server.botIDs = append(server.botIDs, botID)
 	//start the asynchronous listeners
 	server.runner.Start(server.clientEventSender)
 	server.runner.Start(server)
@@ -89,27 +98,28 @@ func (server *Impl) RegisterPlayer(clientConnection connector.ClientConnection) 
 	playerID := server.identifierFactory().String()
 	info.Printf("register new player with id %v", playerID)
 	server.clientEventSender.addClient(playerID, clientConnection)
-	player := server.playerFactory(server.worldMap, server.mathHelper, server.quit)
+	player := server.playerFactory(playerID, server.worldMap, server.mathHelper, server.quit)
 	server.players[playerID] = player
 	newPlayerEvent := event.Event{
 		PlayerID: playerID,
 		State:    player.State(),
 		Action:   "join",
 	}
-	worldMap := server.worldMap.Clone()
-	server.clientEventSender.ReceiveEvent(newPlayerEvent)
-	otherPlayers := make(map[string]state.AnimatedElementState)
+	server.clientEventSender.sendEventToAllClients(newPlayerEvent)
+	otherPlayers := make(map[string]*state.AnimatedElementState)
 	for id, player := range server.players {
 		if id != playerID {
-			otherPlayers[id] = player.State().Clone()
+			otherPlayers[id] = player.State()
 		}
 	}
-	for id, bot := range server.bots {
-		otherPlayers[id] = bot.State().Clone()
-	}
 	extraData := make(map[string]interface{})
-	extraData["worldMap"] = worldMap
+	extraData["worldMap"] = server.worldMap
 	extraData["otherPlayers"] = otherPlayers
+	projectilesStates := make(map[string]*state.AnimatedElementState)
+	for id, projectile := range server.projectiles {
+		projectilesStates[id] = projectile.State()
+	}
+	extraData["projectiles"] = projectilesStates
 	newPlayerInitializationEvent := event.Event{
 		Action:    "init",
 		PlayerID:  playerID,
@@ -129,14 +139,22 @@ func (server *Impl) UnregisterClient(playerID string) {
 		PlayerID: playerID,
 		Action:   "quit",
 	}
-	server.clientEventSender.ReceiveEvent(event)
+	server.clientEventSender.sendEventToAllClients(event)
 }
 
 //ReceiveEventFromClient manage an event received from a client
 // as it is supposed to override the previous ones
 func (server *Impl) ReceiveEventFromClient(event event.Event) {
-	server.players[event.PlayerID].SetState(event.State)
-	server.clientEventSender.ReceiveEvent(event)
+	if event.Action == "fire" {
+		projectileID := event.ExtraData["projectileID"].(string)
+		projectile := server.projectileFactory(projectileID, event.State.Position, event.State.Angle, server.worldMap, server.players, server.mathHelper)
+		server.projectiles[projectileID] = projectile
+		server.projectiles[projectileID].RegisterListener(server)
+		server.clientEventSender.sendEventToAllClients(event)
+	} else if event.Action == "move" {
+		server.players[event.PlayerID].SetState(event.State)
+		server.clientEventSender.sendEventToAllClients(event)
+	}
 }
 
 //Run is a blocking loop using a ticket to update the environment
@@ -148,13 +166,46 @@ func (server *Impl) Run() error {
 			environmentTicker.Stop()
 			return nil
 		case <-environmentTicker.C:
-			for _, bot := range server.bots {
-				bot.Move()
-			}
 			for _, player := range server.players {
 				player.Move()
 			}
+			for _, projectile := range server.projectiles {
+				projectile.Move()
+			}
 		}
+	}
+}
+
+//ReceiveEvent receives event the server subscribed for
+func (server *Impl) ReceiveEvent(eventReceived event.Event) {
+	if eventReceived.Action == "projectileWallImpact" {
+		delete(server.projectiles, eventReceived.PlayerID)
+		eventReceived.Action = "projectileImpact"
+		server.clientEventSender.sendEventToAllClients(eventReceived)
+	} else if eventReceived.Action == "projectilePlayerImpact" {
+		delete(server.projectiles, eventReceived.PlayerID)
+		playerKilledID := eventReceived.ExtraData["playerID"].(string)
+		eventReceived.Action = "projectileImpact"
+		server.clientEventSender.sendEventToAllClients(eventReceived)
+		killEvent := event.Event{
+			Action:   "kill",
+			PlayerID: playerKilledID,
+		}
+		server.clientEventSender.sendEventToAllClients(killEvent)
+		//if the player killed is a bot, the server has to make it move forward
+		moveDirection := state.None
+		for _, botID := range server.botIDs {
+			if botID == playerKilledID {
+				moveDirection = state.Forward
+				break
+			}
+		}
+		server.spawner.Spawn(playerKilledID, moveDirection)
+	} else if eventReceived.Action == "move" {
+		server.players[eventReceived.PlayerID].SetState(eventReceived.State)
+		server.clientEventSender.sendEventToAllClients(eventReceived)
+	} else if eventReceived.Action == "spawn" {
+		server.clientEventSender.sendEventToAllClients(eventReceived)
 	}
 }
 
@@ -168,7 +219,7 @@ type clientEventSender interface {
 	addClient(playerID string, connectionToClient connector.ClientConnection)
 	removeClient(playerID string)
 	sendEventToClient(playerID string, eventToSend event.Event)
-	publisher.EventListener
+	sendEventToAllClients(eventToSend event.Event)
 	close()
 	shutdown()
 }
@@ -221,7 +272,7 @@ func (clientEventSender *clientEventSenderImp) sendEventToClient(playerID string
 	clientEventSender.clientConnections[playerID].SendEventsToClient([]event.Event{eventToSend})
 }
 
-func (clientEventSender *clientEventSenderImp) ReceiveEvent(event event.Event) {
+func (clientEventSender *clientEventSenderImp) sendEventToAllClients(event event.Event) {
 	clientEventSender.eventQueue <- event
 }
 

@@ -46,18 +46,19 @@ func TestGetFillRowRange(t *testing.T) {
 	renderMathHelper := NewRendererMathHelper(nil)
 	startPoint := internalMath.Point2D{X: 1, Y: 2}
 	visibility := 10.0
-	screenHeight := 40.0
+	screenHeight := 40
 	startAngle := 1.7
 	angleStep := 0.1
+	height := 1.0
 	impact1 := raycaster.CastRay(&startPoint, &world1, startAngle, visibility)
 	distance1 := renderMathHelper.CalculateProjectionDistance(&startPoint, impact1, 0)
-	col1Start, _ := renderMathHelper.GetFillRowRange(distance1, screenHeight)
+	col1Start, _ := renderMathHelper.GetFillRowRange(distance1, height, visibility, screenHeight)
 	impact2 := raycaster.CastRay(&startPoint, &world1, startAngle+angleStep, visibility)
 	distance2 := renderMathHelper.CalculateProjectionDistance(&startPoint, impact2, angleStep)
-	col2Start, _ := renderMathHelper.GetFillRowRange(distance2, screenHeight)
+	col2Start, _ := renderMathHelper.GetFillRowRange(distance2, height, visibility, screenHeight)
 	impact3 := raycaster.CastRay(&startPoint, &world1, startAngle+2*angleStep, visibility)
 	distance3 := renderMathHelper.CalculateProjectionDistance(&startPoint, impact3, 2*angleStep)
-	col3Start, _ := renderMathHelper.GetFillRowRange(distance3, screenHeight)
+	col3Start, _ := renderMathHelper.GetFillRowRange(distance3, height, visibility, screenHeight)
 	ratio1 := col1Start - col2Start
 	ratio2 := col2Start - col3Start
 	if ratio1-ratio2 < -1 || ratio1-ratio2 > 1 {

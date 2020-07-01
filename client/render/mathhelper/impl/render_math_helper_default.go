@@ -44,14 +44,54 @@ func (rendererMathHelper *RendererMathHelperImpl) GetRayTracingAngleForColumn(pl
 }
 
 //GetFillRowRange returns the start and end rows for a given obstable distance
-func (rendererMathHelper *RendererMathHelperImpl) GetFillRowRange(distance, screenHeight float64) (int, int) {
+func (rendererMathHelper *RendererMathHelperImpl) GetFillRowRange(distance, maxVisibility, height float64, screenHeight int) (int, int) {
 	//if distance = verticalFieldOfView, startRow = 0, endRow = screenHeight
 	//if distance = visibility, startRow=(screenHeight/2)-1, endRow=(screenHeight/2)+1
+	//attempt 1
 	verticalFieldOfView := 1.0
 	if distance < verticalFieldOfView {
 		distance = verticalFieldOfView
 	}
-	startRow := int(screenHeight/2.0 - screenHeight/(2.0*distance))
+	screenHeightFloatValue := float64(screenHeight)
+	startRow := int(screenHeightFloatValue/2.0 - screenHeightFloatValue/(2.0*distance))
 	endRow := int(screenHeight) - startRow
 	return startRow, endRow
+
+	//attempt 2
+	// minVisibility := 0.001
+	// maxVisibilityHeightRatio := 0.01
+	// heightRatio := (((maxVisibility - distance) * (1 - maxVisibilityHeightRatio)) / (maxVisibility - minVisibility)) + maxVisibilityHeightRatio
+	// if heightRatio > 1.0 {
+	// 	heightRatio = 1.0
+	// }
+	// screenHeightFloat := float64(screenHeight)
+	// height *= heightRatio * screenHeightFloat / 2.0
+	// startRow := int(math.Round(screenHeightFloat/2.0 - height))
+	// endRow := screenHeight - startRow
+	// return startRow, endRow
+
+	//attempt 3
+	//minVisibility := 0.01
+	// perspectiveAngle := 0.005 * math.Pi
+	// if distance < 0 {
+	// 	distance = 0
+	// }
+	// height *= (maxVisibility - distance) / math.Tan(perspectiveAngle)
+	// maxHeight := maxVisibility / math.Tan(perspectiveAngle)
+	// heightRatio := height / maxHeight
+	// if heightRatio > 1.0 {
+	// 	heightRatio = 1.0
+	// }
+	// screenHeightFloat := float64(screenHeight)
+	// startRow := int(math.Round((screenHeightFloat / 2.0) - ((screenHeightFloat / 2.0) * heightRatio)))
+	// endRow := screenHeight - startRow
+	// return startRow, endRow
+
+	//attempt 4
+	// perspectiveFactor := 0.5
+	// height *= (((maxVisibility * perspectiveFactor) - distance) / (maxVisibility * perspectiveFactor))
+	// screenHeightFloat := float64(screenHeight)
+	// startRow := int(math.Round((screenHeightFloat - (screenHeightFloat * height)) / 2.0))
+	// endRow := screenHeight - startRow
+	// return startRow, endRow
 }

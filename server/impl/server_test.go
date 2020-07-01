@@ -2,12 +2,15 @@ package impl
 
 import (
 	"francoisgergaud/3dGame/common/environment/animatedelement"
+	"francoisgergaud/3dGame/common/environment/animatedelement/projectile"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	"francoisgergaud/3dGame/common/event"
+	"francoisgergaud/3dGame/common/math"
 	"francoisgergaud/3dGame/common/math/helper"
 	mathhelper "francoisgergaud/3dGame/common/math/helper"
 	"francoisgergaud/3dGame/common/runner"
+	testeventpublisher "francoisgergaud/3dGame/internal/testutils/common/event/publisher"
 	testhelper "francoisgergaud/3dGame/internal/testutils/common/math/helper"
 	testrunner "francoisgergaud/3dGame/internal/testutils/common/runner"
 	testbot "francoisgergaud/3dGame/internal/testutils/server/bot"
@@ -18,6 +21,7 @@ import (
 	"time"
 
 	testanimatedelement "francoisgergaud/3dGame/internal/testutils/common/environment/animatedelement"
+	testprojectile "francoisgergaud/3dGame/internal/testutils/common/environment/projectile"
 	testworld "francoisgergaud/3dGame/internal/testutils/common/environment/world"
 
 	"github.com/google/uuid"
@@ -44,8 +48,8 @@ func (mock *MockFactories) NewID() uuid.UUID {
 	return args.Get(0).(uuid.UUID)
 }
 
-func (mock *MockFactories) NewPlayer(worldMap world.WorldMap, mathHelper helper.MathHelper, quit <-chan interface{}) animatedelement.AnimatedElement {
-	args := mock.Called(worldMap, mathHelper, quit)
+func (mock *MockFactories) NewPlayer(id string, worldMap world.WorldMap, mathHelper helper.MathHelper, quit <-chan interface{}) animatedelement.AnimatedElement {
+	args := mock.Called(id, worldMap, mathHelper, quit)
 	return args.Get(0).(animatedelement.AnimatedElement)
 }
 
@@ -68,7 +72,7 @@ func (mock *mockClientEventSender) removeClient(playerID string) {
 func (mock *mockClientEventSender) sendEventToClient(playerID string, eventToSend event.Event) {
 	mock.Called(playerID, eventToSend)
 }
-func (mock *mockClientEventSender) ReceiveEvent(event event.Event) {
+func (mock *mockClientEventSender) sendEventToAllClients(event event.Event) {
 	mock.Called(event)
 }
 
@@ -80,6 +84,15 @@ func (mock *mockClientEventSender) shutdown() {
 	mock.Called()
 }
 
+type MockSpawner struct {
+	mock.Mock
+	testeventpublisher.MockEventPublisher
+}
+
+func (mock *MockSpawner) Spawn(animatedelementID string, moveDirection state.Direction) {
+	mock.Called(animatedelementID, moveDirection)
+}
+
 func TestNewServer(t *testing.T) {
 	quit := make(chan interface{})
 	worldUpdateRate := 3
@@ -89,7 +102,6 @@ func TestNewServer(t *testing.T) {
 	assert.IsType(t, &helper.MathHelperImpl{}, server.mathHelper)
 	assert.Len(t, server.players, 0)
 	assert.NotNil(t, server.clientEventSender)
-	assert.Len(t, server.bots, 0)
 	assert.Equal(t, worldUpdateRate, server.botsUpdateRate)
 	assert.IsType(t, &runner.AsyncRunner{}, server.runner)
 	//TODO: create interface for factory: NotNill do not check if this is the expected factory
@@ -112,7 +124,6 @@ func TestStart(t *testing.T) {
 	mockFactories.On("NewID").Return(uuid)
 	mockBot := new(testbot.MockBot)
 	mockFactories.On("NewBot", uuid.String(), worldMap, mathHelper, mock.MatchedBy(func(channel <-chan interface{}) bool { return channel == quit })).Return(mockBot)
-	mockBot.MockEventPublisher.On("RegisterListener", clientEventSender)
 	runner := new(testrunner.MockRunner)
 	server := &Impl{
 		identifierFactory: mockFactories.NewID,
@@ -122,12 +133,13 @@ func TestStart(t *testing.T) {
 		quit:              quit,
 		clientEventSender: clientEventSender,
 		runner:            runner,
-		bots:              make(map[string]bot.Bot),
+		players:           make(map[string]animatedelement.AnimatedElement),
 	}
 	runner.On("Start", clientEventSender).Once()
 	runner.On("Start", server).Once()
+	mockBot.MockEventPublisher.On("RegisterListener", server)
 	server.Start()
-	assert.Equal(t, mockBot, server.bots[uuid.String()])
+	assert.Equal(t, mockBot, server.players[uuid.String()])
 	mock.AssertExpectationsForObjects(t, mockFactories, runner, &mockBot.MockAnimatedElement, &mockBot.MockEventPublisher)
 }
 
@@ -135,17 +147,16 @@ func TestRegisterPlayer(t *testing.T) {
 	quit := make(chan interface{})
 	worldMap := new(testworld.MockWorldMap)
 	serverPlayers := make(map[string]animatedelement.AnimatedElement)
-	bots := make(map[string]bot.Bot)
+	serverProjectiles := make(map[string]projectile.Projectile)
 	uuid := uuid.New()
 	mockFactories := new(MockFactories)
 	mockFactories.On("NewID").Return(uuid)
 	clientEventSender := new(mockClientEventSender)
 	mathHelper := new(testhelper.MockMathHelper)
 	animatedElement := new(testanimatedelement.MockAnimatedElement)
-	mockFactories.On("NewPlayer", worldMap, mathHelper, mock.MatchedBy(func(channel <-chan interface{}) bool { return channel == quit })).Return(animatedElement)
+	mockFactories.On("NewPlayer", uuid.String(), worldMap, mathHelper, mock.MatchedBy(func(channel <-chan interface{}) bool { return channel == quit })).Return(animatedElement)
 	animatedElementState := &state.AnimatedElementState{}
 	animatedElement.On("State").Return(animatedElementState)
-
 	otherPlayerID := "otherPlayer1"
 	otherPlayer := new(testanimatedelement.MockAnimatedElement)
 	otherPlayerState := &state.AnimatedElementState{
@@ -153,20 +164,18 @@ func TestRegisterPlayer(t *testing.T) {
 	}
 	otherPlayer.On("State").Return(otherPlayerState)
 	serverPlayers[otherPlayerID] = otherPlayer
-
-	bots = make(map[string]bot.Bot)
-	botID := "bot1"
-	bot := &testbot.MockBot{}
-	botState := &state.AnimatedElementState{
-		StepAngle: 0.0025,
+	projectileID := "projectile1"
+	projectile := new(testprojectile.MockProjectile)
+	projectileState := &state.AnimatedElementState{
+		Velocity: 0.0075,
+		Angle:    0.75,
 	}
-	bot.MockAnimatedElement.On("State").Return(botState)
-	bots[botID] = bot
-
+	projectile.MockAnimatedElement.On("State").Return(projectileState)
+	serverProjectiles[projectileID] = projectile
 	server := Impl{
 		worldMap:          worldMap,
 		players:           serverPlayers,
-		bots:              bots,
+		projectiles:       serverProjectiles,
 		quit:              quit,
 		identifierFactory: mockFactories.NewID,
 		clientEventSender: clientEventSender,
@@ -175,10 +184,9 @@ func TestRegisterPlayer(t *testing.T) {
 	}
 	clientConnection := new(testconnector.MockClientConnection)
 	clientEventSender.On("addClient", uuid.String(), clientConnection)
-	worldMap.On("Clone").Return(worldMap)
 	var eventForOtherPlayerCapture, eventForPlayerCapture event.Event
 	clientEventSender.On(
-		"ReceiveEvent",
+		"sendEventToAllClients",
 		mock.MatchedBy(
 			func(event event.Event) bool {
 				eventForOtherPlayerCapture = event
@@ -203,17 +211,14 @@ func TestRegisterPlayer(t *testing.T) {
 	assert.Same(t, animatedElementState, eventForOtherPlayerCapture.State)
 	assert.Nil(t, eventForOtherPlayerCapture.ExtraData["otherPlayers"])
 	assert.Equal(t, "join", eventForOtherPlayerCapture.Action)
-
 	assert.Equal(t, "init", eventForPlayerCapture.Action)
 	assert.Equal(t, uuid.String(), eventForPlayerCapture.PlayerID)
 	assert.Same(t, animatedElementState, eventForPlayerCapture.State)
 	assert.Same(t, worldMap, eventForPlayerCapture.ExtraData["worldMap"])
-	assert.Equal(t, *otherPlayerState, eventForPlayerCapture.ExtraData["otherPlayers"].(map[string]state.AnimatedElementState)[otherPlayerID])
-	assert.Equal(t, *botState, eventForPlayerCapture.ExtraData["otherPlayers"].(map[string]state.AnimatedElementState)[botID])
-
+	assert.Equal(t, otherPlayerState, eventForPlayerCapture.ExtraData["otherPlayers"].(map[string]*state.AnimatedElementState)[otherPlayerID])
+	assert.Equal(t, projectileState, eventForPlayerCapture.ExtraData["projectiles"].(map[string]*state.AnimatedElementState)[projectileID])
 	assert.Equal(t, animatedElement, serverPlayers[uuid.String()])
-
-	mock.AssertExpectationsForObjects(t, mockFactories, clientEventSender, animatedElement, worldMap)
+	mock.AssertExpectationsForObjects(t, mockFactories, clientEventSender, animatedElement, projectile, worldMap)
 }
 
 func TestUnregisterClient(t *testing.T) {
@@ -228,7 +233,7 @@ func TestUnregisterClient(t *testing.T) {
 	clientEventSender.On("removeClient", playerID)
 	var eventCapture event.Event
 	clientEventSender.On(
-		"ReceiveEvent",
+		"sendEventToAllClients",
 		mock.MatchedBy(
 			func(event event.Event) bool {
 				eventCapture = event
@@ -244,7 +249,7 @@ func TestUnregisterClient(t *testing.T) {
 	mock.AssertExpectationsForObjects(t, clientEventSender)
 }
 
-func TestReceiveEventFromClient(t *testing.T) {
+func TestReceiveMoveEventFromClient(t *testing.T) {
 	clientEventSender := new(mockClientEventSender)
 	palyers := make(map[string]animatedelement.AnimatedElement)
 	playerID := "playerTest"
@@ -256,7 +261,7 @@ func TestReceiveEventFromClient(t *testing.T) {
 	}
 	var eventCapture event.Event
 	clientEventSender.On(
-		"ReceiveEvent",
+		"sendEventToAllClients",
 		mock.MatchedBy(
 			func(event event.Event) bool {
 				eventCapture = event
@@ -269,6 +274,7 @@ func TestReceiveEventFromClient(t *testing.T) {
 	}
 	eventReceived := event.Event{
 		PlayerID: playerID,
+		Action:   "move",
 		State:    eventState,
 	}
 	player.On("SetState", eventState)
@@ -277,28 +283,255 @@ func TestReceiveEventFromClient(t *testing.T) {
 	mock.AssertExpectationsForObjects(t, player, clientEventSender)
 }
 
-func TestSRun(t *testing.T) {
-	quit := make(chan interface{})
+func TestReceiveFireEventFromClient(t *testing.T) {
+	clientEventSender := new(mockClientEventSender)
 	palyers := make(map[string]animatedelement.AnimatedElement)
 	playerID := "playerTest"
+	projectileFactoryBuilder := new(testprojectile.MockProjectileFactory)
+	mathHelper := new(testhelper.MockMathHelper)
+	worldMap := new(testworld.MockWorldMap)
+	server := Impl{
+		clientEventSender: clientEventSender,
+		players:           palyers,
+		mathHelper:        mathHelper,
+		worldMap:          worldMap,
+		projectileFactory: projectileFactoryBuilder.CreateProjectile,
+		projectiles:       make(map[string]projectile.Projectile),
+	}
+	var eventCapture event.Event
+	clientEventSender.On(
+		"sendEventToAllClients",
+		mock.MatchedBy(
+			func(event event.Event) bool {
+				eventCapture = event
+				return true
+			},
+		),
+	)
+	projectileID := "projectileIDTest"
+	projectilePosition := &math.Point2D{
+		X: 2.0,
+		Y: 4.0,
+	}
+	projectileAngle := 1.5
+	eventState := &state.AnimatedElementState{
+		Position: projectilePosition,
+		Angle:    projectileAngle,
+	}
+	eventReceived := event.Event{
+		PlayerID: playerID,
+		Action:   "fire",
+		State:    eventState,
+		ExtraData: map[string]interface{}{
+			"projectileID": projectileID,
+		},
+	}
+	projectileToReturn := new(testprojectile.MockProjectile)
+	projectileToReturn.MockEventPublisher.On("RegisterListener", &server)
+	projectileFactoryBuilder.On("CreateProjectile", projectileID, projectilePosition, projectileAngle, worldMap, palyers, mathHelper).Return(projectileToReturn)
+
+	server.ReceiveEventFromClient(eventReceived)
+
+	assert.Equal(t, eventReceived, eventCapture)
+	assert.Equal(t, server.projectiles[projectileID], projectileToReturn)
+	mock.AssertExpectationsForObjects(t, projectileToReturn, projectileFactoryBuilder, clientEventSender)
+}
+
+func TestRun(t *testing.T) {
+	quit := make(chan interface{})
+	players := make(map[string]animatedelement.AnimatedElement)
+	playerID := "playerTest"
 	player := new(testanimatedelement.MockAnimatedElement)
-	palyers[playerID] = player
-	bots := make(map[string]bot.Bot)
+	players[playerID] = player
 	botID := "botTest"
 	bot := new(testbot.MockBot)
-	bots[botID] = bot
+	players[botID] = bot
+	projectiles := make(map[string]projectile.Projectile)
+	projectileID := "projectileID"
+	projectile := new(testprojectile.MockProjectile)
+	projectiles[projectileID] = projectile
 	server := Impl{
 		botsUpdateRate: 1000,
-		players:        palyers,
-		bots:           bots,
+		players:        players,
 		quit:           quit,
+		projectiles:    projectiles,
 	}
 	bot.MockAnimatedElement.On("Move")
 	player.On("Move")
+	projectile.MockAnimatedElement.On("Move")
 	go server.Run()
 	<-time.After(time.Millisecond * 5)
 	close(quit)
-	mock.AssertExpectationsForObjects(t, player, &bot.MockAnimatedElement)
+	mock.AssertExpectationsForObjects(t, player, &bot.MockAnimatedElement, projectile)
+}
+
+func TestReceiveEventMove(t *testing.T) {
+	playerID := "playerTest"
+	player := new(testanimatedelement.MockAnimatedElement)
+	players := make(map[string]animatedelement.AnimatedElement)
+	players[playerID] = player
+	clientEventSender := new(mockClientEventSender)
+	server := Impl{
+		players:           players,
+		clientEventSender: clientEventSender,
+	}
+	eventAnimatedElementState := &state.AnimatedElementState{}
+	moveEvent := event.Event{
+		Action:   "move",
+		PlayerID: playerID,
+		State:    eventAnimatedElementState,
+	}
+	clientEventSender.On("sendEventToAllClients", moveEvent)
+	player.On("SetState", eventAnimatedElementState)
+
+	server.ReceiveEvent(moveEvent)
+
+	mock.AssertExpectationsForObjects(t, player, clientEventSender)
+}
+
+func TestReceiveEventSpawn(t *testing.T) {
+	playerID := "playerTest"
+	player := new(testanimatedelement.MockAnimatedElement)
+	players := make(map[string]animatedelement.AnimatedElement)
+	players[playerID] = player
+	clientEventSender := new(mockClientEventSender)
+	server := Impl{
+		players:           players,
+		clientEventSender: clientEventSender,
+	}
+	eventAnimatedElementState := &state.AnimatedElementState{}
+	spawnEvent := event.Event{
+		Action:   "spawn",
+		PlayerID: playerID,
+		State:    eventAnimatedElementState,
+	}
+	clientEventSender.On("sendEventToAllClients", spawnEvent)
+	server.ReceiveEvent(spawnEvent)
+
+	mock.AssertExpectationsForObjects(t, player, clientEventSender)
+}
+
+func TestReceiveEventProjectileWallImpact(t *testing.T) {
+	projectileID := "projectileIDTest"
+	projectiles := make(map[string]projectile.Projectile)
+	projectile := new(testprojectile.MockProjectile)
+	projectiles[projectileID] = projectile
+	clientEventSender := new(mockClientEventSender)
+	server := Impl{
+		projectiles:       projectiles,
+		clientEventSender: clientEventSender,
+	}
+	projectileWallImpactEvent := event.Event{
+		Action:   "projectileWallImpact",
+		PlayerID: projectileID,
+	}
+	clientEventSender.On("sendEventToAllClients", mock.MatchedBy(
+		func(eventToSend event.Event) bool {
+			//The originl event is transformed before being sent to the clients
+			if eventToSend.Action == "projectileImpact" && eventToSend.PlayerID == projectileID {
+				return true
+			}
+			return false
+		},
+	))
+	server.ReceiveEvent(projectileWallImpactEvent)
+
+	assert.NotContains(t, projectiles, projectile)
+	mock.AssertExpectationsForObjects(t, clientEventSender)
+}
+
+func TestReceiveEventProjectilePlayerImpact(t *testing.T) {
+	projectileID := "projectileIDTest"
+	projectiles := make(map[string]projectile.Projectile)
+	projectile := new(testprojectile.MockProjectile)
+	projectiles[projectileID] = projectile
+	playerID := "playerIDTest"
+	clientEventSender := new(mockClientEventSender)
+	spawner := new(MockSpawner)
+	server := Impl{
+		projectiles:       projectiles,
+		clientEventSender: clientEventSender,
+		spawner:           spawner,
+	}
+	projectilePlayerImpactEvent := event.Event{
+		Action:   "projectilePlayerImpact",
+		PlayerID: projectileID,
+		ExtraData: map[string]interface{}{
+			"playerID": playerID,
+		},
+	}
+	clientEventSender.On("sendEventToAllClients", mock.MatchedBy(
+		func(eventToSend event.Event) bool {
+			//The originl event is transformed before being sent to the clients
+			if eventToSend.Action == "projectileImpact" && eventToSend.PlayerID == projectileID {
+				return true
+			}
+			return false
+		},
+	))
+	clientEventSender.On("sendEventToAllClients", mock.MatchedBy(
+		func(eventToSend event.Event) bool {
+			//The originl event is transformed before being sent to the clients
+			if eventToSend.Action == "kill" && eventToSend.PlayerID == playerID {
+				return true
+			}
+			return false
+		},
+	))
+	spawner.On("Spawn", playerID, state.None)
+
+	server.ReceiveEvent(projectilePlayerImpactEvent)
+
+	assert.NotContains(t, projectiles, projectile)
+	mock.AssertExpectationsForObjects(t, clientEventSender, spawner)
+}
+
+func TestReceiveEventProjectileBotImpact(t *testing.T) {
+	projectileID := "projectileIDTest"
+	projectiles := make(map[string]projectile.Projectile)
+	projectile := new(testprojectile.MockProjectile)
+	projectiles[projectileID] = projectile
+	playerID := "playerIDTest"
+	clientEventSender := new(mockClientEventSender)
+	spawner := new(MockSpawner)
+	botIDs := []string{playerID}
+	server := Impl{
+		projectiles:       projectiles,
+		clientEventSender: clientEventSender,
+		spawner:           spawner,
+		botIDs:            botIDs,
+	}
+	projectilePlayerImpactEvent := event.Event{
+		Action:   "projectilePlayerImpact",
+		PlayerID: projectileID,
+		ExtraData: map[string]interface{}{
+			"playerID": playerID,
+		},
+	}
+	clientEventSender.On("sendEventToAllClients", mock.MatchedBy(
+		func(eventToSend event.Event) bool {
+			//The originl event is transformed before being sent to the clients
+			if eventToSend.Action == "projectileImpact" && eventToSend.PlayerID == projectileID {
+				return true
+			}
+			return false
+		},
+	))
+	clientEventSender.On("sendEventToAllClients", mock.MatchedBy(
+		func(eventToSend event.Event) bool {
+			//The originl event is transformed before being sent to the clients
+			if eventToSend.Action == "kill" && eventToSend.PlayerID == playerID {
+				return true
+			}
+			return false
+		},
+	))
+	spawner.On("Spawn", playerID, state.Forward)
+
+	server.ReceiveEvent(projectilePlayerImpactEvent)
+
+	assert.NotContains(t, projectiles, projectile)
+	mock.AssertExpectationsForObjects(t, clientEventSender, spawner)
 }
 
 func TestClientEventSenderRun(t *testing.T) {
@@ -326,7 +559,7 @@ func TestClientEventSenderRun(t *testing.T) {
 				return true
 			},
 		),
-	)
+	).Return(nil)
 	clientConnection.On("Close")
 	eventToSend := event.Event{
 		Action:    "actionTest",
@@ -389,7 +622,7 @@ func TestClientEventSenderSendEventToClient(t *testing.T) {
 				return true
 			},
 		),
-	)
+	).Return(nil)
 	eventToSend := event.Event{
 		Action:    "actionTest",
 		TimeFrame: 0,
@@ -410,7 +643,7 @@ func TestClientEventSenderReceiveEvent(t *testing.T) {
 	eventToSend := event.Event{
 		Action: "actionTest",
 	}
-	clientEventSender.ReceiveEvent(eventToSend)
+	clientEventSender.sendEventToAllClients(eventToSend)
 	eventReceived := <-eventQueue
 	assert.Equal(t, eventToSend, eventReceived)
 }

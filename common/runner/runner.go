@@ -1,5 +1,7 @@
 package runner
 
+import "log"
+
 //Runnable can be run by a runner
 type Runnable interface {
 	Run() error
@@ -17,6 +19,9 @@ type AsyncRunner struct {
 //Start triggers a goroutine for the function given in parameter
 func (runner *AsyncRunner) Start(runnable Runnable) {
 	go func() {
-		runnable.Run()
+		err := runnable.Run()
+		if err != nil {
+			log.Println(err)
+		}
 	}()
 }

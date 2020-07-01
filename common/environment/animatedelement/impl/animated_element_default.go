@@ -12,7 +12,7 @@ import (
 )
 
 //NewAnimatedElement builds a new pointer to AnimatedElementImpl.
-func NewAnimatedElement(initialPosition *innerMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper helper.MathHelper) animatedelement.AnimatedElement {
+func NewAnimatedElement(id string, initialPosition *innerMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper helper.MathHelper) animatedelement.AnimatedElement {
 	state := state.AnimatedElementState{
 		Position:        initialPosition,
 		Angle:           initialAngle,
@@ -23,12 +23,13 @@ func NewAnimatedElement(initialPosition *innerMath.Point2D, initialAngle, veloci
 		MoveDirection:   moveDirection,
 		RotateDirection: rotateDirection,
 	}
-	return NewAnimatedElementWithState(&state, world, mathHelper)
+	return NewAnimatedElementWithState(id, &state, world, mathHelper)
 }
 
 //NewAnimatedElementWithState builds a new pointer to AnimatedElementImpl.
-func NewAnimatedElementWithState(animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper) animatedelement.AnimatedElement {
+func NewAnimatedElementWithState(id string, animatedElementState *state.AnimatedElementState, world world.WorldMap, mathHelper helper.MathHelper) animatedelement.AnimatedElement {
 	return &AnimatedElementImpl{
+		id:         id,
 		state:      animatedElementState,
 		world:      world,
 		mathHelper: mathHelper,
@@ -71,6 +72,7 @@ func (animatedElement *AnimatedElementImpl) Move() {
 		newX := animatedElement.state.Position.X
 		newY := animatedElement.state.Position.Y
 		if animatedElement.state.MoveDirection == state.Forward {
+
 			newX = animatedElement.state.Position.X + math.Cos(animatedElement.state.Angle*math.Pi)*animatedElement.state.Velocity
 			newY = animatedElement.state.Position.Y + math.Sin(animatedElement.state.Angle*math.Pi)*animatedElement.state.Velocity
 		} else if animatedElement.state.MoveDirection == state.Backward {
@@ -82,4 +84,9 @@ func (animatedElement *AnimatedElementImpl) Move() {
 			animatedElement.state.Position.Y = newY
 		}
 	}
+}
+
+//ID returns the animated-element's identifier
+func (animatedElement *AnimatedElementImpl) ID() string {
+	return animatedElement.id
 }

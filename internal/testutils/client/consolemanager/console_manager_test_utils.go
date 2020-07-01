@@ -1,7 +1,7 @@
 package testconsolemanager
 
 import (
-	"francoisgergaud/3dGame/client/player"
+	"francoisgergaud/3dGame/client"
 	"francoisgergaud/3dGame/common/event"
 
 	"github.com/stretchr/testify/mock"
@@ -19,8 +19,8 @@ func (mock *MockConsoleEventManager) Run() error {
 }
 
 //SetPlayer mocks the call to the the method of the same name.
-func (mock *MockConsoleEventManager) SetPlayer(player player.Player) {
-	mock.Called(player)
+func (mock *MockConsoleEventManager) SetPlayer(engine client.Engine) {
+	mock.Called(engine)
 }
 
 //MockEventPublisher mocks an event-publisher

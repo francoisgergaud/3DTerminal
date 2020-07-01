@@ -8,6 +8,10 @@ import (
 	"francoisgergaud/3dGame/server"
 )
 
+func bufferProvider() []event.Event {
+	return make([]event.Event, 0)
+}
+
 //NewWebSocketClientConnection is a factory for WebSocketClientConnection
 func NewWebSocketClientConnection(eventToSendToCLient chan event.Event, clientWebsocketSender ClientWebSocketSender, wsConnection websocket.WebsocketConnection) *WebSocketClientConnection {
 	return &WebSocketClientConnection{
@@ -25,10 +29,11 @@ type WebSocketClientConnection struct {
 }
 
 //SendEventsToClient sends events to a client
-func (clientConnection *WebSocketClientConnection) SendEventsToClient(events []event.Event) {
+func (clientConnection *WebSocketClientConnection) SendEventsToClient(events []event.Event) error {
 	for _, event := range events {
 		clientConnection.eventToSendToCLient <- event
 	}
+	return nil
 }
 
 //Close closes the connection. It stops the client-websocket-sender.
@@ -41,23 +46,27 @@ func (clientConnection *WebSocketClientConnection) Close() {
 //NewClientWebSocketListener is a factory for ClientWebSocketListener
 func NewClientWebSocketListener(playerID string, wsConnection websocket.WebsocketConnection, server server.Server) *ClientWebSocketListener {
 	return &ClientWebSocketListener{
-		playerID:     playerID,
-		wsConnection: wsConnection,
-		server:       server,
+		playerID:       playerID,
+		wsConnection:   wsConnection,
+		server:         server,
+		bufferProvider: bufferProvider,
 	}
 }
 
 //ClientWebSocketListener is a runnable which listen from incoming websocket messages from a client
 type ClientWebSocketListener struct {
-	wsConnection websocket.WebsocketConnection
-	server       server.Server
-	playerID     string
+	wsConnection   websocket.WebsocketConnection
+	server         server.Server
+	playerID       string
+	bufferProvider func() []event.Event
 }
 
 //Run is a blocking loop to listen on incoming websocket events from a client
 func (clientWebSocketListener *ClientWebSocketListener) Run() error {
-	eventsFromClient := make([]event.Event, 0)
 	for {
+		//TODO: optimize the reader: I had to create a new array on each read, otherwise, object set during
+		//the first array initialization are re-used and override
+		eventsFromClient := clientWebSocketListener.bufferProvider()
 		if err := clientWebSocketListener.wsConnection.ReadJSON(&eventsFromClient); err != nil {
 			clientWebSocketListener.server.UnregisterClient(clientWebSocketListener.playerID)
 			return fmt.Errorf("%w", err)

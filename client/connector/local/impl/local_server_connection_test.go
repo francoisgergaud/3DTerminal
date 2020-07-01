@@ -6,6 +6,7 @@ import (
 	testServer "francoisgergaud/3dGame/internal/testutils/server"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -25,18 +26,63 @@ func TestNotifyServer(t *testing.T) {
 	}
 	eventToSend := event.Event{Action: "fakeAction"}
 	events := []event.Event{eventToSend}
-	server.On("ReceiveEventFromClient", eventToSend)
+	server.On("ReceiveEventFromClient", mock.MatchedBy(
+		func(eventParameter event.Event) bool {
+			//ensure cloning happened by checking the pointers
+			if &eventParameter != &eventToSend {
+				return true
+			}
+			return false
+		},
+	),
+	)
 	serverConnection.NotifyServer(events)
+	mock.AssertExpectationsForObjects(t, server)
 }
 
-func TestDisconnect(t *testing.T) {}
+func TestNotifyServerWithCloneError(t *testing.T) {
+	serverConnection := LocalServerConnectionImpl{}
+	eventToSend := event.Event{
+		Action: "fakeAction",
+		ExtraData: map[string]interface{}{
+			"wrongKey": "wrongValue",
+		},
+	}
+	events := []event.Event{eventToSend}
+
+	assert.Error(t, serverConnection.NotifyServer(events))
+}
 
 func TestSendEventsToClient(t *testing.T) {
 	engine := new(testClient.MockEngine)
 	serverConnection := LocalServerConnectionImpl{
 		engine: engine,
 	}
-	events := make([]event.Event, 0)
-	engine.On("ReceiveEventsFromServer", events)
+	eventToSend := event.Event{Action: "fakeAction"}
+	events := []event.Event{eventToSend}
+	engine.On("ReceiveEventsFromServer", mock.MatchedBy(
+		func(eventsParameter []event.Event) bool {
+			//ensure cloning happened by checking the pointers
+			if &eventsParameter[0] != &eventToSend {
+				return true
+			}
+			return false
+		},
+	),
+	)
 	serverConnection.SendEventsToClient(events)
+	mock.AssertExpectationsForObjects(t, engine)
+}
+
+func TestSendEventsToClientWithCloneError(t *testing.T) {
+	serverConnection := LocalServerConnectionImpl{}
+	eventToSend := event.Event{
+		Action: "fakeAction",
+		ExtraData: map[string]interface{}{
+			"wrongKey": "wrongValue",
+		},
+	}
+	events := []event.Event{eventToSend}
+
+	assert.Error(t, serverConnection.SendEventsToClient(events))
 }

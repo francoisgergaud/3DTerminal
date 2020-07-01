@@ -77,15 +77,16 @@ func (raySampler *GradientRaySampler) getColorArrayFromDepthRange(startColor, en
 	if startColor > endColor {
 		colorStep := (startColor - endColor) / len(raySampler.depthRanges)
 		for i := 0; i < len(raySampler.depthRanges); i++ {
-			styles[i] = tcell.StyleDefault.Background(tcell.Color(startColor - colorStep*i))
+			styles[i] = tcell.StyleDefault.Background(tcell.Color(endColor + colorStep*i))
 		}
+		styles[len(raySampler.depthRanges)] = tcell.StyleDefault.Background(tcell.Color(endColor))
 	} else {
 		colorStep := (endColor - startColor) / len(raySampler.depthRanges)
 		for i := 0; i < len(raySampler.depthRanges); i++ {
 			styles[i] = tcell.StyleDefault.Background(tcell.Color(startColor + colorStep*i))
 		}
+		styles[len(raySampler.depthRanges)] = tcell.StyleDefault.Background(tcell.Color(startColor))
 	}
-	styles[len(raySampler.depthRanges)] = tcell.StyleDefault.Background(tcell.Color(endColor))
 	return styles
 }
 

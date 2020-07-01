@@ -7,6 +7,10 @@ import (
 	"francoisgergaud/3dGame/common/event"
 )
 
+func bufferProvider() []event.Event {
+	return make([]event.Event, 0)
+}
+
 //NewWebSocketServerConnection creates a new websocket client connection and register it to the server
 func NewWebSocketServerConnection(engine client.Engine, url string, dialer WebsocketDialer, quit chan<- interface{}) (*WebSocketServerConnection, error) {
 	wsConnection, _, err := dialer.Dial(url, nil)
@@ -14,9 +18,10 @@ func NewWebSocketServerConnection(engine client.Engine, url string, dialer Webso
 		return nil, fmt.Errorf("Could not dial server websocket on :"+url+", %w", err)
 	}
 	websocketServerConnection := &WebSocketServerConnection{
-		engine:       engine,
-		wsConnection: wsConnection,
-		quit:         quit,
+		engine:         engine,
+		wsConnection:   wsConnection,
+		quit:           quit,
+		bufferProvider: bufferProvider,
 	}
 	websocketServerConnection.engine.ConnectToServer(websocketServerConnection)
 	//listen to the events from the server
@@ -27,9 +32,10 @@ func NewWebSocketServerConnection(engine client.Engine, url string, dialer Webso
 type WebSocketServerConnection struct {
 	engine client.Engine
 	// The websocket connection.
-	wsConnection websocket.WebsocketConnection
-	playerID     string
-	quit         chan<- interface{}
+	wsConnection   websocket.WebsocketConnection
+	playerID       string
+	quit           chan<- interface{}
+	bufferProvider func() []event.Event
 }
 
 //NotifyServer sends an event to s server
@@ -48,7 +54,7 @@ func (connection *WebSocketServerConnection) Disconnect() {
 //Run is a blocking loop listening events from server
 func (connection *WebSocketServerConnection) Run() error {
 	for {
-		eventsFromServer := make([]event.Event, 0)
+		eventsFromServer := connection.bufferProvider()
 		err := connection.wsConnection.ReadJSON(&eventsFromServer)
 		if err != nil {
 			close(connection.quit)

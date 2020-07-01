@@ -3,7 +3,7 @@ package impl
 import (
 	"testing"
 
-	testplayer "francoisgergaud/3dGame/internal/testutils/client/player"
+	testclient "francoisgergaud/3dGame/internal/testutils/client"
 	testtcell "francoisgergaud/3dGame/internal/testutils/tcell"
 
 	"github.com/stretchr/testify/assert"
@@ -23,18 +23,18 @@ func TestListenExitEvent(t *testing.T) {
 }
 
 func TestListenPlayerMoveEvent(t *testing.T) {
-	mockPlayer := new(testplayer.MockPlayer)
+	mockEngine := new(testclient.MockEngine)
 	mockScreen := new(testtcell.MockScreen)
 	quit := make(chan interface{})
 	upArrowEvent := tcell.NewEventKey(tcell.KeyUp, ' ', 0)
 	quitEvent := tcell.NewEventKey(tcell.KeyEscape, ' ', 0)
 	mockScreen.On("PollEvent").Return(upArrowEvent).Once()
 	mockScreen.On("PollEvent").Return(quitEvent).Once()
-	mockPlayer.On("Action", upArrowEvent)
+	mockEngine.On("Action", upArrowEvent)
 	consoleEventManager := NewConsoleEventManager(mockScreen, quit)
-	consoleEventManager.SetPlayer(mockPlayer)
+	consoleEventManager.SetPlayer(mockEngine)
 	consoleEventManager.Run()
 	_, status := <-quit
 	assert.Falsef(t, status, "quit channel status invalid.")
-	mock.AssertExpectationsForObjects(t, mockScreen, mockPlayer)
+	mock.AssertExpectationsForObjects(t, mockScreen, mockEngine)
 }

@@ -2,10 +2,11 @@ package testclient
 
 import (
 	"francoisgergaud/3dGame/client/connector"
-	"francoisgergaud/3dGame/client/player"
 	"francoisgergaud/3dGame/common/environment/animatedelement"
+	"francoisgergaud/3dGame/common/environment/animatedelement/projectile"
 	"francoisgergaud/3dGame/common/event"
 
+	"github.com/gdamore/tcell"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -20,9 +21,9 @@ func (mock *MockEngine) ReceiveEventsFromServer(events []event.Event) {
 }
 
 //Player mocks the method of the same name
-func (mock *MockEngine) Player() player.Player {
+func (mock *MockEngine) Player() animatedelement.AnimatedElement {
 	args := mock.Called()
-	return args.Get(0).(player.Player)
+	return args.Get(0).(animatedelement.AnimatedElement)
 }
 
 //Shutdown mocks the method of the same name
@@ -39,4 +40,20 @@ func (mock *MockEngine) ConnectToServer(connectionToServer connector.ServerConne
 func (mock *MockEngine) OtherPlayers() map[string]animatedelement.AnimatedElement {
 	args := mock.Called()
 	return args.Get(0).(map[string]animatedelement.AnimatedElement)
+}
+
+//Action mocks the method of the name
+func (mock *MockEngine) Action(eventKey *tcell.EventKey) {
+	mock.Called(eventKey)
+}
+
+//ReceiveEvent mocks the method of the name
+func (mock *MockEngine) ReceiveEvent(event event.Event) {
+	mock.Called(event)
+}
+
+//Projectiles mocks the method of the name
+func (mock *MockEngine) Projectiles() map[string]projectile.Projectile {
+	args := mock.Called()
+	return args.Get(0).(map[string]projectile.Projectile)
 }

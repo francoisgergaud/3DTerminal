@@ -1,17 +1,17 @@
 package impl
 
 import (
-	player "francoisgergaud/3dGame/client/player"
 	"francoisgergaud/3dGame/common/environment/animatedelement"
+	"francoisgergaud/3dGame/common/environment/animatedelement/projectile"
 	"francoisgergaud/3dGame/common/environment/animatedelement/state"
 	"francoisgergaud/3dGame/common/environment/world"
 	internalMath "francoisgergaud/3dGame/common/math"
 	"math"
 	"testing"
 
-	testPlayer "francoisgergaud/3dGame/internal/testutils/client/player"
 	testRenderMathHelper "francoisgergaud/3dGame/internal/testutils/client/render/mathhelper"
 	testAnimatedElement "francoisgergaud/3dGame/internal/testutils/common/environment/animatedelement"
+	testprojectile "francoisgergaud/3dGame/internal/testutils/common/environment/projectile"
 	testWorld "francoisgergaud/3dGame/internal/testutils/common/environment/world"
 	testMathHelper "francoisgergaud/3dGame/internal/testutils/common/math/helper"
 	testTcell "francoisgergaud/3dGame/internal/testutils/tcell"
@@ -25,7 +25,7 @@ type MockWallRendererProducer struct {
 	mock.Mock
 }
 
-func (mock *MockWallRendererProducer) getRenderer(screen tcell.Screen, player player.Player, worldMap world.WorldMap, columnIndex int) elementRenderer {
+func (mock *MockWallRendererProducer) getRenderer(screen tcell.Screen, player animatedelement.AnimatedElement, worldMap world.WorldMap, columnIndex int) elementRenderer {
 	args := mock.Called(screen, player, worldMap, columnIndex)
 	return args.Get(0).(elementRenderer)
 }
@@ -34,7 +34,7 @@ type MockWorldElementRendererProducer struct {
 	mock.Mock
 }
 
-func (mock *MockWorldElementRendererProducer) getRenderer(player player.Player, fieldOfViewAngle float64, worldElement animatedelement.AnimatedElement) elementRenderer {
+func (mock *MockWorldElementRendererProducer) getRenderer(player animatedelement.AnimatedElement, fieldOfViewAngle float64, worldElement animatedelement.AnimatedElement) elementRenderer {
 	args := mock.Called(player, fieldOfViewAngle, worldElement)
 	return args.Get(0).(elementRenderer)
 }
@@ -74,7 +74,7 @@ func TestRender(t *testing.T) {
 	worldElementRendererProducer := new(MockWorldElementRendererProducer)
 	renderer := createRenderer(screenWidth, screenHeight, renderMathHelper, fieldOfViewAngle, wallRendererProducer, worldElementRendererProducer)
 	worldMap := new(testWorld.MockWorldMap)
-	player := new(testPlayer.MockPlayer)
+	player := new(testAnimatedElement.MockAnimatedElement)
 	worldElement := new(testAnimatedElement.MockAnimatedElement)
 	elementRenderer := new(MockElementRenderer)
 	elementRenderer.On("getDistance").Return(0.1)
@@ -90,7 +90,13 @@ func TestRender(t *testing.T) {
 	worldElementRendererProducer.On("getRenderer", player, 0.7, worldElement).Return(worldElementRenderer)
 	worldElements := make(map[string]animatedelement.AnimatedElement)
 	worldElements["worldElementID"] = worldElement
-	renderer.Render("playerID", worldMap, player, worldElements, screen)
+	projectiles := make(map[string]projectile.Projectile)
+	projectile := new(testprojectile.MockProjectile)
+	projectiles["projectileID"] = projectile
+	worldElementRendererProducer.On("getRenderer", player, 0.7, projectile).Return(worldElementRenderer)
+
+	renderer.Render("playerID", worldMap, player, worldElements, projectiles, screen)
+
 	wallRendererProducer.AssertExpectations(t)
 	worldElementRendererProducer.AssertExpectations(t)
 	worldElementRenderer.AssertExpectations(t)
@@ -120,8 +126,8 @@ func TestWallRendererProducer(t *testing.T) {
 		StepAngle: stepAngle,
 	}
 	worldMap := new(testWorld.MockWorldMap)
-	player := new(testPlayer.MockPlayer)
-	player.MockAnimatedElement.On("State").Return(playerState)
+	player := new(testAnimatedElement.MockAnimatedElement)
+	player.On("State").Return(playerState)
 	columnIndex := 1
 	rayTracingAngle := 0.25
 	projectedDistance := 1.5
@@ -130,11 +136,11 @@ func TestWallRendererProducer(t *testing.T) {
 	endRow := 8
 	isWallAngle := false
 	wallStyle := tcell.StyleDefault.Background(tcell.Color101)
-
+	wallHeight := 1.0
 	rendererMathHelper.On("GetRayTracingAngleForColumn", player.State().Angle, columnIndex, screenWidth, fieldOfViewAngle).Return(rayTracingAngle)
 	mathHelper.On("CastRay", player.State().Position, worldMap, rayTracingAngle, visibility).Return(rayTracingDestinationPoint).Return(rayTracingDestinationPoint)
 	rendererMathHelper.On("CalculateProjectionDistance", playerPosition, rayTracingDestinationPoint, player.State().Angle-rayTracingAngle).Return(projectedDistance)
-	rendererMathHelper.On("GetFillRowRange", projectedDistance, float64(screenHeight)).Return(startRow, endRow)
+	rendererMathHelper.On("GetFillRowRange", projectedDistance, visibility, wallHeight, screenHeight).Return(startRow, endRow)
 	rendererMathHelper.On("IsWallAngle", rayTracingDestinationPoint).Return(isWallAngle)
 	raySampler.On("GetWallStyleFromDistance", projectedDistance).Return(wallStyle)
 	wallRendererProducer.getRenderer(screen, player, worldMap, columnIndex)
@@ -165,8 +171,8 @@ func TestWallRendererProducerWithWallAngle(t *testing.T) {
 		StepAngle: stepAngle,
 	}
 	worldMap := new(testWorld.MockWorldMap)
-	player := new(testPlayer.MockPlayer)
-	player.MockAnimatedElement.On("State").Return(&playerState)
+	player := new(testAnimatedElement.MockAnimatedElement)
+	player.On("State").Return(&playerState)
 	columnIndex := 1
 	rayTracingAngle := 0.25
 	projectedDistance := 1.5
@@ -174,11 +180,12 @@ func TestWallRendererProducerWithWallAngle(t *testing.T) {
 	startRow := 2
 	endRow := 8
 	isWallAngle := true
+	wallHeight := 1.0
 
 	rendererMathHelper.On("GetRayTracingAngleForColumn", player.State().Angle, columnIndex, screenWidth, fieldOfViewAngle).Return(rayTracingAngle)
 	mathHelper.On("CastRay", player.State().Position, worldMap, rayTracingAngle, visibility).Return(rayTracingDestinationPoint).Return(rayTracingDestinationPoint)
 	rendererMathHelper.On("CalculateProjectionDistance", playerPosition, rayTracingDestinationPoint, player.State().Angle-rayTracingAngle).Return(projectedDistance)
-	rendererMathHelper.On("GetFillRowRange", projectedDistance, float64(screenHeight)).Return(startRow, endRow)
+	rendererMathHelper.On("GetFillRowRange", projectedDistance, visibility, wallHeight, screenHeight).Return(startRow, endRow)
 	rendererMathHelper.On("IsWallAngle", rayTracingDestinationPoint).Return(isWallAngle)
 	wallRendererProducer.getRenderer(screen, player, worldMap, columnIndex)
 	mathHelper.AssertExpectations(t)
@@ -207,8 +214,8 @@ func TestWallRendererProducerWithNilRayTracing(t *testing.T) {
 		StepAngle: stepAngle,
 	}
 	worldMap := new(testWorld.MockWorldMap)
-	player := new(testPlayer.MockPlayer)
-	player.MockAnimatedElement.On("State").Return(&playerState)
+	player := new(testAnimatedElement.MockAnimatedElement)
+	player.On("State").Return(&playerState)
 	columnIndex := 1
 	rayTracingAngle := 0.25
 
@@ -272,11 +279,13 @@ func TestWorldElementRendererProducerImpl(t *testing.T) {
 	endOffset := 1.0
 	worldElementRowStart := 3
 	worldElementRowEnd := 7
+	maxVisibility := 10.0
+	wallHeight := 1.0
 	mathHelper := new(testMathHelper.MockMathHelper)
 	rendererMathHelper := new(testRenderMathHelper.MockRendererMathHelper)
 	mathHelper.On("GetWorldElementProjection", playerPosition, playerAngle, fieldOfView, worldElementPosition, worldElementSize).Return(isVisible, startScreenWidthRatio, startOffset, endScreenWidthRatio, endOffset)
-	rendererMathHelper.On("GetFillRowRange", distance, float64(screenHeight)).Return(worldElementRowStart, worldElementRowEnd)
-	worldElementRendererProducer := createWorldElementRendererProducer(mathHelper, rendererMathHelper, screenHeight, screenWidth)
+	rendererMathHelper.On("GetFillRowRange", distance, maxVisibility, wallHeight, screenHeight).Return(worldElementRowStart, worldElementRowEnd)
+	worldElementRendererProducer := createWorldElementRendererProducer(mathHelper, rendererMathHelper, screenHeight, screenWidth, maxVisibility)
 	worldElement := new(testAnimatedElement.MockAnimatedElement)
 	worldElementState := state.AnimatedElementState{
 		Position: worldElementPosition,
@@ -284,12 +293,12 @@ func TestWorldElementRendererProducerImpl(t *testing.T) {
 		Size:     worldElementSize,
 	}
 	worldElement.On("State").Return(&worldElementState)
-	player := new(testPlayer.MockPlayer)
+	player := new(testAnimatedElement.MockAnimatedElement)
 	playerState := state.AnimatedElementState{
 		Position: playerPosition,
 		Angle:    playerAngle,
 	}
-	player.MockAnimatedElement.On("State").Return(&playerState)
+	player.On("State").Return(&playerState)
 	worldElementRenderer := worldElementRendererProducer.getRenderer(player, fieldOfView, worldElement).(*worldElementRenderer)
 	assert.Equal(t, worldElementRenderer.distance, distance)
 	assert.Equal(t, worldElementRenderer.screenHeight, screenHeight)

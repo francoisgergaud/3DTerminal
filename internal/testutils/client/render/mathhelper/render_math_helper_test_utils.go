@@ -30,7 +30,7 @@ func (mock *MockRendererMathHelper) GetRayTracingAngleForColumn(angle float64, c
 }
 
 //GetFillRowRange mocks the method of the same name
-func (mock *MockRendererMathHelper) GetFillRowRange(distance, screenHeight float64) (int, int) {
-	args := mock.Called(distance, screenHeight)
+func (mock *MockRendererMathHelper) GetFillRowRange(distance, maxVisibility, height float64, screenHeight int) (int, int) {
+	args := mock.Called(distance, maxVisibility, height, screenHeight)
 	return args.Int(0), args.Int(1)
 }

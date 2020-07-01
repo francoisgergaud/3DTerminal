@@ -16,6 +16,7 @@ import (
 	"github.com/gdamore/tcell"
 )
 
+//Bot is an NPC animated-element
 type Bot interface {
 	publisher.EventPublisher
 	animatedelement.AnimatedElement
@@ -24,8 +25,7 @@ type Bot interface {
 //NewBotImpl build a new bot implementation.
 func NewBotImpl(id string, initialPosition *internalMath.Point2D, initialAngle, velocity, stepAngle, size float64, moveDirection, rotateDirection state.Direction, style tcell.Style, world world.WorldMap, mathHelper mathHelper.MathHelper, quit <-chan interface{}) bot.Bot {
 	result := BotImpl{
-		id:              id,
-		AnimatedElement: animatedelementImpl.NewAnimatedElement(initialPosition, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, world, mathHelper),
+		AnimatedElement: animatedelementImpl.NewAnimatedElement(id, initialPosition, initialAngle, velocity, stepAngle, size, moveDirection, rotateDirection, style, world, mathHelper),
 		EventPublisher:  publisherImpl.NewEventPublisherImpl(),
 		mathHelper:      mathHelper,
 		world:           world,
@@ -35,7 +35,6 @@ func NewBotImpl(id string, initialPosition *internalMath.Point2D, initialAngle, 
 
 //BotImpl is a bot implementation.
 type BotImpl struct {
-	id string
 	animatedelement.AnimatedElement
 	publisher.EventPublisher
 	world      world.WorldMap
@@ -44,34 +43,34 @@ type BotImpl struct {
 
 //Move the bot's position depending on the colision of walls
 func (bot *BotImpl) Move() {
-	state := bot.State()
-	rayDestination := bot.mathHelper.CastRay(state.Position, bot.world, state.Angle, state.Velocity)
+	botState := bot.State()
+	rayDestination := bot.mathHelper.CastRay(botState.Position, bot.world, botState.Angle, botState.Velocity)
 	if rayDestination != nil {
 		//horizontal rebound
 		if rayDestination.X-math.Floor(rayDestination.X) < 0.0001 && rayDestination.X-math.Floor(rayDestination.X) > -0.0001 {
 			switch {
-			case state.Angle <= 1.0:
-				state.Angle = 1.0 - state.Angle
-			case state.Angle <= 2.0:
-				state.Angle = 3.0 - state.Angle
+			case botState.Angle <= 1.0:
+				botState.Angle = 1.0 - botState.Angle
+			case botState.Angle <= 2.0:
+				botState.Angle = 3.0 - botState.Angle
 			}
 		}
 		//vertical rebound
 		if rayDestination.Y-math.Floor(rayDestination.Y) < 0.0001 && rayDestination.Y-math.Floor(rayDestination.Y) > -0.0001 {
 			switch {
-			case state.Angle <= 1.0:
-				state.Angle = 2.0 - state.Angle
-			case state.Angle <= 2.0:
-				state.Angle = 2.0 - state.Angle
+			case botState.Angle <= 1.0:
+				botState.Angle = 2.0 - botState.Angle
+			case botState.Angle <= 2.0:
+				botState.Angle = 2.0 - botState.Angle
 			}
 		}
 		//distanceToWall := worldElement.GetState().Position.Distance(rayDestination)
 		//state.Position.X = rayDestination.X + math.Cos(state.Angle*math.Pi)*(state.Velocity-distanceToWall)
 		//state.Position.Y = rayDestination.Y + math.Sin(state.Angle*math.Pi)*(state.Velocity-distanceToWall)
 		event := event.Event{
-			PlayerID: bot.id,
+			PlayerID: bot.ID(),
 			Action:   "move",
-			State:    state,
+			State:    botState,
 		}
 		bot.PublishEvent(event)
 	} else {

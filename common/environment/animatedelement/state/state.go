@@ -20,12 +20,12 @@ type AnimatedElementState struct {
 }
 
 //Clone creates a copy.
-func (a *AnimatedElementState) Clone() AnimatedElementState {
+func (a *AnimatedElementState) Clone() *AnimatedElementState {
 	var position *math.Point2D
 	if a.Position != nil {
 		position = a.Position.Clone()
 	}
-	return AnimatedElementState{
+	return &AnimatedElementState{
 		Position:        position,
 		Angle:           a.Angle,
 		StepAngle:       a.StepAngle,

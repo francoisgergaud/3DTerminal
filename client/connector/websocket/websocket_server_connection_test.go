@@ -14,6 +14,15 @@ import (
 	testwebsocket "francoisgergaud/3dGame/internal/testutils/common/connector"
 )
 
+type MockFactories struct {
+	mock.Mock
+}
+
+func (mockFactory *MockFactories) bufferProvider() []event.Event {
+	args := mockFactory.Called()
+	return args.Get(0).([]event.Event)
+}
+
 type MockWebsocketDialer struct {
 	mock.Mock
 }
@@ -60,22 +69,26 @@ func TestRun(t *testing.T) {
 	engine := new(testClient.MockEngine)
 	mockWebsocketConnection := new(testwebsocket.MockWebsockeConnection)
 	playerID := "playerTest"
+	mockFactories := new(MockFactories)
 	webSocketServerConnection := &WebSocketServerConnection{
-		engine:       engine,
-		wsConnection: mockWebsocketConnection,
-		playerID:     playerID,
-		quit:         make(chan interface{}),
+		engine:         engine,
+		wsConnection:   mockWebsocketConnection,
+		playerID:       playerID,
+		quit:           make(chan interface{}),
+		bufferProvider: mockFactories.bufferProvider,
 	}
-	mockWebsocketConnection.On("ReadJSON", mock.MatchedBy(
-		func(eventsFromServer *[]event.Event) bool {
-			engine.On("ReceiveEventsFromServer", *eventsFromServer)
-			return true
-		},
-	)).Return(nil).Once()
+	eventsFromServer := make([]event.Event, 0)
+	eventsFromServer2 := make([]event.Event, 0)
+	mockFactories.On("bufferProvider").Return(eventsFromServer).Once()
+	mockFactories.On("bufferProvider").Return(eventsFromServer2).Once()
+	engine.On("ReceiveEventsFromServer", eventsFromServer)
 	errorFromReader := errors.New("test read-error")
-	mockWebsocketConnection.On("ReadJSON", mock.AnythingOfType("*[]event.Event")).Return(errorFromReader).Once()
+	mockWebsocketConnection.On("ReadJSON", &eventsFromServer).Return(nil).Once()
+	mockWebsocketConnection.On("ReadJSON", &eventsFromServer2).Return(errorFromReader).Once()
+
 	webSocketServerConnection.Run()
-	mock.AssertExpectationsForObjects(t, mockWebsocketConnection, engine)
+
+	mock.AssertExpectationsForObjects(t, mockWebsocketConnection, engine, mockFactories)
 }
 
 func TestNotifyServer(t *testing.T) {

@@ -11,5 +11,5 @@ type RendererMathHelper interface {
 	CalculateProjectionDistance(startPosition *math.Point2D, endPosition *math.Point2D, angle float64) float64
 	IsWallAngle(point *math.Point2D) bool
 	GetRayTracingAngleForColumn(playerAngle float64, columnIndex, screenWidth int, viewAngle float64) float64
-	GetFillRowRange(distance, screenHeight float64) (int, int)
+	GetFillRowRange(distance, maxVisibility, height float64, screenHeight int) (int, int)
 }

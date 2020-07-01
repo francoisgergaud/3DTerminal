@@ -17,8 +17,9 @@ func (mock *MockClientConnection) ReceiveEventsFromClient(events []event.Event) 
 }
 
 //SendEventsToClient mocks the method of the same name
-func (mock *MockClientConnection) SendEventsToClient(events []event.Event) {
-	mock.Called(events)
+func (mock *MockClientConnection) SendEventsToClient(events []event.Event) error {
+	args := mock.Called(events)
+	return args.Error(0)
 }
 
 //Close mocks the method of the same name
